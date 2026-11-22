@@ -84,10 +84,25 @@ def _append_jsonl(path: Path, rec: dict, private: bool = False) -> None:
         os.chmod(path, 0o600)
 
 
+def _check_evidence(ev):
+    """Optional resolver evidence: a flat JSON object of strings/numbers/bools, sealed into the record hash."""
+    if ev is None:
+        return None
+    if not isinstance(ev, dict) or not ev:
+        raise LedgerError("evidence must be a non-empty object")
+    for k, v in ev.items():
+        if not isinstance(k, str) or not (isinstance(v, (str, int, float, bool)) or v is None):
+            raise LedgerError("evidence must map strings to strings, numbers, booleans or null")
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            raise LedgerError("evidence numbers must be finite")
+    return json.loads(canonical_json(ev))
+
+
 class Ledger:
     """Append-only local ledger.
 
     public dir:   receipts.jsonl, resolutions.jsonl   (safe to share; receipts are hash-only)
+                  a resolution has outcome 1, 0 or "void" (never scored), and optional sealed resolver evidence
     private dir:  openings.jsonl                      (task_id, p, salt; keep secret until resolved)
     """
 
@@ -137,8 +152,7 @@ class Ledger:
         return rec
 
     # -- resolve ---------------------------------------------------------------
-    def resolve(self, task_id: str, outcome: bool, agent_id: Optional[str] = None, version: Optional[str] = None) -> dict:
-        """Record the real outcome (True = the task succeeded). Reveals the opening so anyone can verify it."""
+    def _open_for(self, task_id, agent_id, version):
         cands = [o for o in self._openings() if o["task_id"] == task_id
                  and (agent_id is None or o["agent_id"] == agent_id)
                  and (version is None or o["agent_version"] == version)]
@@ -146,39 +160,71 @@ class Ledger:
             raise LedgerError(f"no declaration found for task {task_id!r}")
         if len(cands) > 1:
             raise LedgerError("task_id is ambiguous; pass agent_id and version")
-        o = cands[0]
+        return cands[0]
+
+    def _append_resolution(self, o: dict, body: dict) -> dict:
         res = self.resolutions()
         if any(r["commitment"] == o["commitment"] for r in res):
-            raise LedgerError(f"task {task_id!r} is already resolved; outcomes cannot be changed")
+            raise LedgerError(f"task {o['task_id']!r} is already resolved; outcomes cannot be changed")
         rcpt = next(r for r in self.receipts() if r["commitment"] == o["commitment"])
         now = self._clock()
         if _parse(now) < _parse(rcpt["declared_at"]):
             raise LedgerError("resolution time is earlier than declaration time (clock moved backwards)")
-        y = 1 if outcome else 0
-        p = float(o["p"])
-        q = min(LOG_LOSS_CLIP[1], max(LOG_LOSS_CLIP[0], p))
         rec = {"schema": SCHEMA, "seq": len(res) + 1, "commitment": o["commitment"],
-               "agent_id": o["agent_id"], "agent_version": o["agent_version"],
-               "outcome": y, "resolved_at": now,
+               "agent_id": o["agent_id"], "agent_version": o["agent_version"], "resolved_at": now,
                "opening": {"task_id": o["task_id"], "p": o["p"], "salt": o["salt"]},
-               "score": {"squared_error": round((p - y) ** 2, 12),
-                         "log_loss": round(-(math.log(q) if y else math.log(1 - q)), 12)},
                "prev": res[-1]["record_hash"] if res else GENESIS}
+        rec.update(body)
         rec["record_hash"] = _chain_hash(rec, "record_hash")
         _append_jsonl(self.resolutions_path, rec)
         return rec
 
+    def resolve(self, task_id: str, outcome: bool, agent_id: Optional[str] = None, version: Optional[str] = None,
+                evidence: Optional[dict] = None) -> dict:
+        """Record the real outcome (True = the task succeeded). Reveals the opening so anyone can verify it.
+
+        evidence (optional): what the resolver read, e.g. {"source": url, "value_read": "1.0992",
+        "read_at": iso, "raw_sha256": hex}. It is sealed into the record hash, so editing it later breaks verify.
+        """
+        o = self._open_for(task_id, agent_id, version)
+        y = 1 if outcome else 0
+        p = float(o["p"])
+        q = min(LOG_LOSS_CLIP[1], max(LOG_LOSS_CLIP[0], p))
+        body = {"outcome": y,
+                "score": {"squared_error": round((p - y) ** 2, 12),
+                          "log_loss": round(-(math.log(q) if y else math.log(1 - q)), 12)}}
+        ev = _check_evidence(evidence)
+        if ev is not None: body["evidence"] = ev
+        return self._append_resolution(o, body)
+
+    def void(self, task_id: str, reason: str, agent_id: Optional[str] = None, version: Optional[str] = None,
+             evidence: Optional[dict] = None) -> dict:
+        """Close a declaration with no scorable outcome (e.g. the source was not read inside its window).
+
+        A void is final, reveals the opening like any resolution, and is never scored. It still counts
+        against coverage, so voiding cannot be used to hide wrong answers.
+        """
+        if not isinstance(reason, str) or not reason.strip():
+            raise LedgerError("a void needs a non-empty reason")
+        o = self._open_for(task_id, agent_id, version)
+        body = {"outcome": "void", "void_reason": reason.strip()}
+        ev = _check_evidence(evidence)
+        if ev is not None: body["evidence"] = ev
+        return self._append_resolution(o, body)
+
     # -- scoring ---------------------------------------------------------------
     def pairs(self, agent_id=None, version=None) -> list:
-        return [(float(r["opening"]["p"]), r["outcome"]) for r in self.resolutions()
-                if (agent_id is None or r["agent_id"] == agent_id) and (version is None or r["agent_version"] == version)]
+        return [(float(r["opening"]["p"]), r["outcome"]) for r in self.resolutions() if r["outcome"] in (0, 1)
+                and (agent_id is None or r["agent_id"] == agent_id) and (version is None or r["agent_version"] == version)]
 
     def summary(self, agent_id=None, version=None) -> dict:
         rcpts = [r for r in self.receipts() if (agent_id is None or r["agent_id"] == agent_id)
                  and (version is None or r["agent_version"] == version)]
         pr = self.pairs(agent_id, version)
+        nv = sum(1 for r in self.resolutions() if r["outcome"] == "void"
+                 and (agent_id is None or r["agent_id"] == agent_id) and (version is None or r["agent_version"] == version))
         out = metrics.summarize(pr) if pr else {"n": 0}
-        out.update({"declared": len(rcpts), "resolved": len(pr), "pending": len(rcpts) - len(pr),
+        out.update({"declared": len(rcpts), "resolved": len(pr), "voided": nv, "pending": len(rcpts) - len(pr) - nv,
                     "coverage": (len(pr) / len(rcpts)) if rcpts else None})
         return out
 
@@ -234,14 +280,24 @@ def verify_ledger_dir(path) -> dict:
         try:
             if _parse(r["resolved_at"]) < _parse(rc["declared_at"]): errs.append(f"resolution seq {r['seq']}: resolved before declared")
         except Exception: errs.append(f"resolution seq {r['seq']}: bad timestamp")
+        if "evidence" in r:
+            try: _check_evidence(r["evidence"])
+            except LedgerError as e: errs.append(f"resolution seq {r['seq']}: {e}")
+        if r.get("outcome") == "void":
+            if not isinstance(r.get("void_reason"), str) or not r["void_reason"].strip():
+                errs.append(f"resolution seq {r['seq']}: void without a reason")
+            if "score" in r: errs.append(f"resolution seq {r['seq']}: a void must not carry a score")
+            continue
         try:
             p = float(r["opening"]["p"]); y = r["outcome"]
-            if y not in (0, 1): errs.append(f"resolution seq {r['seq']}: outcome must be 0 or 1")
+            if y not in (0, 1) or isinstance(y, bool): errs.append(f"resolution seq {r['seq']}: outcome must be 0, 1 or \"void\"")
             elif abs(r["score"]["squared_error"] - (p - y) ** 2) > 1e-9: errs.append(f"resolution seq {r['seq']}: score does not match p and outcome")
         except Exception: errs.append(f"resolution seq {r['seq']}: malformed record")
     pairs = [(float(r["opening"]["p"]), r["outcome"]) for r in resolutions if r.get("outcome") in (0, 1)]
     summ = metrics.summarize(pairs) if pairs else {"n": 0}
-    summ.update({"declared": len(receipts), "resolved": len(resolutions), "pending": len(receipts) - len(resolutions)})
+    nv = sum(1 for r in resolutions if r.get("outcome") == "void")
+    summ.update({"declared": len(receipts), "resolved": len(pairs), "voided": nv,
+                 "pending": len(receipts) - len(pairs) - nv})
     return {"ok": not errs, "errors": errs, "summary": summ,
             "chain_heads": {"receipt_head": receipts[-1]["receipt_hash"] if receipts else GENESIS,
                             "resolution_head": resolutions[-1]["record_hash"] if resolutions else GENESIS}}
