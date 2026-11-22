@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 (prepared 2026-11-22, not yet released)
+- Adds `Ledger.void(task_id, reason, evidence=None)`: closes a declaration with outcome `"void"` and a required reason. A void is final, reveals the opening, is never scored, and still counts against coverage, so voiding cannot hide wrong answers. A void cannot be resolved later, and a resolved task cannot be voided.
+- Adds optional `evidence` to `resolve()` and `void()`: a flat object (strings, numbers, booleans, null) describing what the resolver read, e.g. source, value read, read time and a hash of the raw response. It is sealed into the record hash, so editing it breaks `verify`.
+- `summary()` and `verify` now report `voided` next to `declared`, `resolved` and `pending`. `resolved` counts scored outcomes only.
+- `verify` rejects a void without a reason and a void that carries a score.
+- Backward compatible: commitments, receipts and v0.1 resolution records are unchanged, and existing ledgers verify as before.
+
 ## 0.1.5 (prepared 2026-11-18, not yet released)
 - Adds an `mcp-name` marker (`io.github.qants-labs/mizan-ledger`) so the MCP Registry can verify ownership under the QANTS organization namespace.
 - Adds a `mizan-ledger mcp` subcommand that starts the same optional stdio MCP server as the existing `mizan-ledger-mcp` script (requires `pip install "mizan-ledger[mcp]"`). If the extra is missing, the command prints an install hint and exits nonzero.

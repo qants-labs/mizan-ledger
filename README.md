@@ -39,6 +39,27 @@ print(led.summary("my-agent"))     # n, Brier + 95% interval, ECE, log loss, acc
 mizan-ledger verify ledger/        # offline check of hash chains, openings and scores
 ```
 
+
+## Void outcomes and resolver evidence (v0.2)
+
+Some declarations cannot be scored fairly, for example when the outcome source was not read inside its allowed window. Close them with a void instead of guessing:
+
+```python
+led.void("q-18-02", "LATE_READ_VOID: read after the grace period")
+```
+
+A void is final, reveals the opening, is never scored and still counts against coverage (`voided` is reported next to `resolved` and `pending`).
+
+Either kind of resolution can carry what the resolver read. It is sealed into the record hash:
+
+```python
+led.resolve("q-20-03", True, evidence={"source": "https://mempool.space/api/v1/fees/recommended",
+                                       "value_read": "77", "read_at": "2026-11-21T23:05:00+02:00",
+                                       "raw_sha256": "<sha256 of the raw response>"})
+```
+
+The library still does not check that the evidence is true. It only makes it impossible to change after the fact without `verify` failing.
+
 ## What gets recorded
 
 | File | Visibility | Contents |
