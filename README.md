@@ -72,6 +72,18 @@ Brier (mean squared error), log loss (p clipped to [0.01, 0.99], same as the Miz
 
 No CI workflow file is included in this repository.
 
+## Eval frameworks (optional)
+
+- **promptfoo:** `examples/promptfoo/mizan_assert.py` is a Python assertion (`type: python`, `value: file://mizan_assert.py`).
+  It reads the model's stated confidence ("Confidence: 0.8" in the output, or a `confidence` var), checks the expected
+  text, records both in a ledger and returns `{pass, score, reason}` (score = 1 − squared error). No promptfoo import.
+- **Inspect AI:** `pip install "mizan-ledger[inspect]"`, then `inspect eval my_task.py --scorer mizan_ledger/mizan_calibration`
+  (found by name through the `inspect_ai` entry point), or `from mizan_ledger.adapters.inspect_scorer import mizan_calibration`.
+  It wraps an inner scorer (default `match()`), records stated confidence and outcome in the ledger, and adds a `brier`
+  metric next to accuracy.
+- In both, a sample without a stated confidence is not given an invented `p`, and the declaration is written when the
+  assertion or scorer runs (after the model answered); the ledger proves the order of declaration and resolution only.
+
 ## Local MCP server (optional)
 
 An optional stdio [MCP](https://modelcontextprotocol.io) server lets an agent host (Cursor, Claude Desktop, VS Code or any MCP client) use the ledger without leaving the machine. It needs Python >= 3.10; the core install is unchanged.
