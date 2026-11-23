@@ -4,7 +4,7 @@
 
 Declare how confident your agent is **before** a task, commit a salted hash of that declaration, then score honesty against the **real outcome** (your own tests, evals or checks). Local-first, hash-only, verifiable offline.
 
-> Status: **v0.1.5, early alpha** by QANTS. On PyPI (not on npm). MIT licensed (see `LICENSE`). No network access, no telemetry, no dependencies in the core library.
+> Status: **v0.2.0 (prepared, not yet released), early alpha** by QANTS. On PyPI (not on npm). MIT licensed (see `LICENSE`). No network access, no telemetry, no dependencies in the core library.
 
 ## Why
 
@@ -57,6 +57,30 @@ Commitment = `SHA-256(canonical_json({agent_id, agent_version, p, salt, schema, 
 - The library cannot tell whether the outcome you pass to `resolve` is honest. Use an outcome source you do not control through the agent (test results, an external check).
 - Small samples give wide intervals; ECE is biased upward for small n. The summary prints the interval and `n`; read them.
 - Scores are about calibration, not about whether the agent is good, safe or secure.
+
+## Add Mizan to CI in 5 minutes
+
+`mizan-ledger gate` compares this run's Brier score with a baseline you commit, and fails only when calibration got
+worse by more than `--max-brier-delta` **and** the low end of the current 95% bootstrap interval (`brier_interval()`)
+is still worse than that. Small samples never pass or fail by accident: below `--min-n` resolved declarations the gate
+exits `2` (inconclusive, a warning).
+
+```bash
+pytest --mizan-ledger-dir .mizan --mizan-agent-id my-agent                  # tests marked @pytest.mark.confidence(p)
+mizan-ledger gate .mizan --baseline mizan-baseline.json --write-baseline   # once, then commit mizan-baseline.json
+mizan-ledger gate .mizan --baseline mizan-baseline.json --max-brier-delta 0.02 --min-n 50
+```
+
+| Exit | Meaning |
+|---|---|
+| 0 | pass |
+| 1 | calibration got worse beyond the delta and the interval, or the ledger does not verify |
+| 2 | inconclusive: fewer than `--min-n` resolved declarations, or no baseline yet |
+
+In GitHub Actions, use the composite action in this repository (`action.yml`). It installs the package, runs pytest
+with the plugin, runs the gate and writes a job summary (Brier, ECE, n, interval, pass/fail). A ready workflow is in
+`examples/ci/`. The gate measures calibration of stated confidence against your test outcomes; it does not show that
+the agent is good, safe or secure.
 
 ## Scores (`mizan_ledger.metrics`)
 
