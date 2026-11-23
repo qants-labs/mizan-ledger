@@ -16,7 +16,8 @@ jobs:
       - uses: qants-labs/mizan-ledger@main   # pin to a release tag or commit SHA once one is published
         with:
           jsonl: ""                          # set to results.jsonl for option 1; empty = run pytest with the plugin
-          baseline: mizan-baseline.json      # the first run creates it if missing: commit that file
+          baseline: mizan-baseline.json      # kept in the Actions cache (saved on main pushes, restored on PRs);
+                                             # or commit a file, e.g. .mizan/baseline.json, to use it as is
           agent-id: my-agent
           # thresholds are QANTS starting values, not industry standards:
           # max-brier-delta: "0.02"

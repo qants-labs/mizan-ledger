@@ -6,8 +6,12 @@
    - your own eval harness: write `results.jsonl`, one line per item:
      `{"id": "q1", "confidence": 0.85, "correct": true}`, with `confidence: null` for "I don't know".
 2. Copy `mizan-gate.yml` to `.github/workflows/` in your repository.
-3. The first run with at least 50 answered items creates `mizan-baseline.json`. Commit it so later runs compare
-   against it. With `strict: "true"` that first run fails (exit 2) instead of passing.
+3. Baseline:
+   - **Default:** a push to the default branch saves the run's baseline in the Actions cache. Pull requests restore
+     the newest one for the same `agent-id`. Before the first push, a pull request reports "inconclusive: baseline
+     created" and passes; with `strict: "true"` it fails (exit 2) instead.
+   - **Alternative:** commit the baseline file, e.g. `baseline: .mizan/baseline.json`. The action then uses it as is
+     and never uses the cache.
 
 Exit codes of `mizan-ledger gate`:
 

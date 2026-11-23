@@ -186,3 +186,30 @@ def test_cli_exit_codes_and_markdown_summary(tmp_path):
     text = md.read_text()
     assert "Mizan calibration gate: PASS" in text and "Mizan calibration gate: FAIL" in text
     assert "| Brier |" in text and "Overconfident-wrong share" in text
+
+
+# --- follow-up: abstain wording for ledgers; "answered N of M items" always ----------------------------------------------
+def test_ledger_abstain_rate_is_not_recorded_never_zero(tmp_path):
+    make_ledger(tmp_path / "cur", 0.9, 90, 100)
+    code, rep = ci_gate.check(tmp_path / "cur", tmp_path / "b.json")
+    assert rep["abstain_rate"] == "not recorded (ledger format)" and rep["abstained"] == "not recorded (ledger format)"
+    md = ci_gate.markdown(code, rep)
+    assert "| Abstain rate | not recorded (ledger format) |" in md and "| Abstain rate | 0" not in md
+    base = json.loads((tmp_path / "b.json").read_text())
+    assert base["abstain_rate"] == "not recorded (ledger format)"
+
+
+def test_answered_n_of_m_always_shown(tmp_path):
+    make_jsonl(tmp_path / "small.jsonl", [(0.9, True)] * 30 + [(None, False)] * 10)
+    code, rep = ci_gate.check(tmp_path / "small.jsonl", tmp_path / "b.json")
+    assert rep["result"] == "not enough data" and rep["answered"] == "answered 30 of 40 items"
+    assert "Answered 30 of 40 items" in ci_gate.markdown(code, rep)
+    make_ledger(tmp_path / "led", 0.9, 9, 10)
+    code, rep = ci_gate.check(tmp_path / "led", tmp_path / "b.json")
+    assert rep["answered"] == "answered 10 of 10 items" and "Answered 10 of 10 items" in ci_gate.markdown(code, rep)
+
+
+def test_baseline_in_a_new_directory_is_created(tmp_path):
+    make_ledger(tmp_path / "cur", 0.9, 90, 100)
+    code, rep = ci_gate.check(tmp_path / "cur", tmp_path / "new" / ".mizan" / "baseline.json")
+    assert code == 0 and (tmp_path / "new" / ".mizan" / "baseline.json").exists()

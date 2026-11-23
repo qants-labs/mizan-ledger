@@ -16,7 +16,7 @@ inputs:
     description: "Optional JSONL file written by your own eval harness ({id, confidence 0..1 or null, correct} per line). When set, the pytest step is skipped and the gate reads this file."
     default: ""
   baseline:
-    description: "Baseline file committed to your repository. If it does not exist, the first run creates it (commit it)."
+    description: "Baseline file. If it is committed to your repository it is used as is; otherwise it is kept in the Actions cache (saved on pushes to the default branch, restored on pull requests)."
     default: "mizan-baseline.json"
   max-brier-delta:
     description: "Allowed worsening of the Brier score (QANTS starting value, not an industry standard)"
@@ -70,6 +70,27 @@ runs:
         python -m pytest --mizan-ledger-dir "$MIZAN_DIR" --mizan-agent-id "$MIZAN_AGENT" --mizan-agent-version "$MIZAN_VERSION" $PYTEST_ARGS
         echo "code=$?" >> "$GITHUB_OUTPUT"
 
+    - name: Baseline source (committed file, or the Actions cache)
+      id: base
+      shell: bash
+      env:
+        MIZAN_BASELINE: ${{ inputs.baseline }}
+      run: |
+        if git ls-files --error-unmatch "$MIZAN_BASELINE" >/dev/null 2>&1; then
+          echo "committed=true" >> "$GITHUB_OUTPUT"; echo "baseline: committed file $MIZAN_BASELINE"
+        else
+          echo "committed=false" >> "$GITHUB_OUTPUT"; echo "baseline: Actions cache"
+        fi
+
+    - name: Restore the latest baseline for this agent (pull requests)
+      if: github.event_name == 'pull_request' && steps.base.outputs.committed != 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ inputs.baseline }}
+        key: mizan-baseline-${{ inputs.agent-id }}-pr-${{ github.run_id }}
+        restore-keys: |
+          mizan-baseline-${{ inputs.agent-id }}-
+
     - name: Calibration gate
       id: gate
       shell: bash
@@ -100,6 +121,16 @@ runs:
           2) echo "::error title=Mizan calibration gate::no baseline yet and strict mode is on; a baseline was created, commit it" ;;
         esac
         exit "$code"
+
+    - name: Save this run's baseline for this agent (pushes to the default branch)
+      if: >-
+        always() && github.event_name == 'push' && steps.base.outputs.committed != 'true' &&
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+        hashFiles(inputs.baseline) != ''
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ inputs.baseline }}
+        key: mizan-baseline-${{ inputs.agent-id }}-${{ github.run_id }}
 
     - name: Fail if the tests failed
       if: inputs.jsonl == '' && steps.tests.outputs.code != '0'

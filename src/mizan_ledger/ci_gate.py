@@ -39,6 +39,7 @@ PASS, FAIL, STRICT_NO_BASELINE = 0, 1, 2
 INCONCLUSIVE = STRICT_NO_BASELINE          # kept for callers of the first version of this module
 BASELINE_SCHEMA = "mizan-ledger-baseline/2"
 THRESHOLD_LABEL = "QANTS starting values, not industry standards"
+ABSTAIN_NOT_RECORDED = "not recorded (ledger format)"   # a ledger cannot hold a null confidence
 DEFAULTS = {"min_n": 50, "max_brier_delta": 0.02, "max_ocw_delta": 0.02, "overconfident_at": 0.9}
 _REPS, _SEED = 2000, 20261116
 
@@ -103,8 +104,8 @@ def _load(source, agent=None, version=None) -> dict:
         return {"ok": False, "errors": [f"not a ledger directory or JSONL file: {source}"], "input": "unknown"}
     rep = verify_ledger_dir(src)
     pairs = Ledger(src, private_path=str(src / ".noprivate")).pairs(agent, version)
-    # a ledger cannot hold "I don't know" (null confidence), so its abstain rate is 0 by construction
-    return {"ok": rep["ok"], "errors": rep["errors"], "pairs": pairs, "abstained": 0, "total": len(pairs),
+    # a ledger cannot hold "I don't know" (null confidence): abstains are not recorded, never reported as 0
+    return {"ok": rep["ok"], "errors": rep["errors"], "pairs": pairs, "abstained": None, "total": len(pairs),
             "input": "ledger"}
 
 
@@ -126,8 +127,12 @@ def measure(source, agent=None, version=None, overconfident_at: float = DEFAULTS
     if not d["ok"]:
         return {"ok": False, "errors": d["errors"], "n": 0, "input": d.get("input")}
     pairs = d["pairs"]
+    if d["abstained"] is None:
+        abstained = abstain_rate = ABSTAIN_NOT_RECORDED
+    else:
+        abstained, abstain_rate = d["abstained"], (d["abstained"] / d["total"]) if d["total"] else None
     out = {"ok": True, "errors": [], "input": d["input"], "n": len(pairs), "items": d["total"],
-           "abstained": d["abstained"], "abstain_rate": (d["abstained"] / d["total"]) if d["total"] else None}
+           "answered": f"answered {len(pairs)} of {d['total']} items", "abstained": abstained, "abstain_rate": abstain_rate}
     if pairs:
         bi = metrics.brier_interval(pairs, reps=_REPS, seed=_SEED)
         ocw = [1.0 if (p >= overconfident_at and not y) else 0.0 for p, y in pairs]
@@ -164,6 +169,7 @@ def write_baseline(source, baseline_path, min_n=DEFAULTS["min_n"], agent=None, v
     if m["n"] < min_n:
         return PASS, {**_scrub(m), "thresholds": th, "result": "not enough data",
                       "reason": f"{m['n']} answered items (< min_n {min_n}); no baseline written and no score shown"}
+    Path(baseline_path).parent.mkdir(parents=True, exist_ok=True)
     Path(baseline_path).write_text(json.dumps(_baseline_doc(m, agent, version), indent=2, sort_keys=True) + "\n",
                                    encoding="utf-8")
     return PASS, {**m, "thresholds": th, "result": "baseline written", "reason": f"baseline written to {baseline_path}"}
@@ -185,6 +191,7 @@ def check(source, baseline_path, max_brier_delta=DEFAULTS["max_brier_delta"], mi
                       "reason": f"{m['n']} answered items (< min_n {min_n}); not enough data, no score shown"}
     bp = Path(baseline_path)
     if not bp.exists():
+        bp.parent.mkdir(parents=True, exist_ok=True)
         bp.write_text(json.dumps(_baseline_doc(m, agent, version), indent=2, sort_keys=True) + "\n", encoding="utf-8")
         rep = {**m, "thresholds": th, "result": "inconclusive: baseline created",
                "reason": f"no baseline existed; created {bp} from this run (commit it so later runs compare against it)"}
@@ -222,6 +229,8 @@ def markdown(code: int, rep: dict) -> str:
         return "n/a" if x is None else f"{x:.{d}f}"
     def ci(v):
         return f"[{f(v[0])}, {f(v[1])}]" if v else "n/a"
+    def ar(x):
+        return x if isinstance(x, str) else f(x)
     lines = [f"### Mizan calibration gate: {label}", ""]
     if "brier" in rep:
         base = rep.get("baseline") or {}
@@ -232,9 +241,10 @@ def markdown(code: int, rep: dict) -> str:
                   f"{f(rep.get('ocw_share'))} | {ci(rep.get('ocw_ci95'))} | {f(base.get('ocw_share'))} | "
                   f"yes, if worse by > {th.get('max_ocw_delta')} |",
                   f"| ECE (10 bins) | {f(rep.get('ece'))} | | {f(base.get('ece'))} | no, report only |",
-                  f"| Abstain rate | {f(rep.get('abstain_rate'))} | | {f(base.get('abstain_rate'))} | no, report only |", ""]
-    lines += [f"Answered items: {rep.get('n', 0)} of {rep.get('items', rep.get('n', 0))} (abstained: "
-              f"{rep.get('abstained', 0)}); minimum {th.get('min_n')}.", "", f"{rep.get('reason', '')}", "",
+                  f"| Abstain rate | {ar(rep.get('abstain_rate'))} | | {ar(base.get('abstain_rate'))} | no, report only |", ""]
+    answered = rep.get("answered") or f"answered {rep.get('n', 0)} of {rep.get('items', rep.get('n', 0))} items"
+    lines += [f"{answered[0].upper()}{answered[1:]} (abstained: {ar(rep.get('abstained'))}); minimum {th.get('min_n')} answered.",
+              "", f"{rep.get('reason', '')}", "",
               f"_Thresholds: {THRESHOLD_LABEL}. Calibration of stated confidence against your own outcomes only; it does "
               "not show that the agent is good, safe or secure._"]
     return "\n".join(lines) + "\n"

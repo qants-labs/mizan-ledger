@@ -12,6 +12,10 @@
   - No baseline: one is created from the run, "inconclusive: baseline created", exit 0 (exit 2 with `--strict`).
   - Thresholds are configurable and labelled "QANTS starting values, not industry standards" in every report.
 - Composite GitHub Action (`action.yml` at the repository root) and an example workflow in `examples/ci/`.
+  - The baseline is saved to the Actions cache on default-branch pushes (`mizan-baseline-<agent-id>-<run id>`) and
+    restored on pull requests (newest for the same agent id). A committed baseline file is used as is instead.
+- Reports always state "answered N of M items". With ledger input the abstain rate is "not recorded (ledger format)",
+  never 0.
 - Core stays dependency-free and offline.
 
 ## 0.1.5 (prepared 2026-11-18, not yet released)
