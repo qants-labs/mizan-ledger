@@ -58,6 +58,33 @@ Commitment = `SHA-256(canonical_json({agent_id, agent_version, p, salt, schema, 
 - Small samples give wide intervals; ECE is biased upward for small n. The summary prints the interval and `n`; read them.
 - Scores are about calibration, not about whether the agent is good, safe or secure.
 
+## Pre-action gate (`should_act`)
+
+Put one check in front of anything irreversible (delete, send, pay). The agent states its confidence; the gate returns
+`ACT` only if it meets your risk threshold, otherwise `ABSTAIN` with a reason.
+
+```python
+from mizan_ledger import Ledger
+from mizan_ledger.gate import should_act
+
+led = Ledger(".mizan")
+d = should_act(p=0.82, risk_threshold=0.95, ledger=led, agent_id="my-agent",
+               task_id="delete-old-backups-2026-11-23", commit=True)   # commit: the stated p is declared first
+if not d.act:
+    raise SystemExit(f"abstain: {d.reason}")                            # ask a human instead
+delete_old_backups()
+led.resolve("delete-old-backups-2026-11-23", outcome=check_backups_ok())
+```
+
+- With at least 50 resolved records for the agent, `p` is adjusted with the agent's own reliability table (the success
+  rate in `p`'s bin, shrunk toward `p` when the bin is small). Both `p_raw` and `p_adjusted` are returned, and the
+  decision uses the adjusted value. With fewer records, raw `p` is used and `reason` says so.
+- `commit=True` declares the stated `p` before the action, so the task is scored whether the agent acted or abstained.
+  The ledger stores the stated `p` only; the decision is returned to you.
+- The same check is the `should_act` tool of the optional MCP server.
+- It relies on stated confidence and past calibration. It cannot verify the agent's reasoning, and a well-calibrated
+  agent can still be wrong.
+
 ## Scores (`mizan_ledger.metrics`)
 
 Brier (mean squared error), log loss (p clipped to [0.01, 0.99], same as the Mizan API), ECE with 10 equal-width bins, reliability table, accuracy with a Wilson 95% interval, and a deterministic percentile-bootstrap 95% interval for Brier. The always-0.5 baseline Brier is 0.25.
@@ -86,7 +113,7 @@ mizan-ledger mcp              # same server as the mizan-ledger-mcp script
   "env": {"MIZAN_LEDGER_DIR": ".mizan", "MIZAN_AGENT_ID": "my-agent"}}}}
 ```
 
-Tools: `commit_confidence` (declare before the task), `resolve_outcome` (record the real outcome), `get_calibration` (read-only scores), `verify_ledger` (read-only offline check). Local files only: no network, no keys, no shell commands. The outcome you supply is not verified; prefer a source the agent does not control. `MIZAN_PRIVATE_DIR` (default `<MIZAN_LEDGER_DIR>/private`) holds the openings; keep it out of version control.
+Tools: `commit_confidence` (declare before the task), `resolve_outcome` (record the real outcome), `get_calibration` (read-only scores), `verify_ledger` (read-only offline check), `should_act` (pre-action gate; writes only with `commit=true`). Local files only: no network, no keys, no shell commands. The outcome you supply is not verified; prefer a source the agent does not control. `MIZAN_PRIVATE_DIR` (default `<MIZAN_LEDGER_DIR>/private`) holds the openings; keep it out of version control.
 
 This is not the remote `qants-diwan` MCP server on the QANTS site (Mizan benchmark and directory); that is a different product.
 
