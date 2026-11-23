@@ -25,6 +25,8 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     v = sub.add_parser("verify", help="verify hash chains, openings and scores (no network, no private files)"); v.add_argument("dir")
     s = sub.add_parser("summary", help="print scores for a ledger directory"); s.add_argument("dir"); s.add_argument("--agent"); s.add_argument("--version")
+    o = sub.add_parser("export-otel", help="print resolved records as OpenTelemetry gen_ai.evaluation.result events (JSON Lines)")
+    o.add_argument("dir"); o.add_argument("--agent"); o.add_argument("--version"); o.add_argument("--out", help="write to this file instead of stdout")
     sub.add_parser(
         "mcp",
         help="run the optional local stdio MCP server (requires the [mcp] extra)",
@@ -37,6 +39,16 @@ def main(argv=None) -> int:
         return 0 if rep["ok"] else 1
     if a.cmd == "mcp":
         return _run_mcp()
+    if a.cmd == "export-otel":
+        from .otel_export import export
+        rep = export(a.dir, a.out, a.agent, a.version)
+        if not rep["ok"]:
+            print("ledger does not verify; nothing exported: " + "; ".join(rep["errors"][:3]), file=sys.stderr)
+            return 1
+        if not a.out:
+            for line in rep["lines"]:
+                print(line)
+        return 0
     led = Ledger(a.dir, private_path=a.dir + "/.noprivate")
     print(json.dumps(led.summary(a.agent, a.version), indent=2, sort_keys=True))
     return 0

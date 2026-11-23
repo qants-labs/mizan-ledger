@@ -72,6 +72,19 @@ Brier (mean squared error), log loss (p clipped to [0.01, 0.99], same as the Miz
 
 No CI workflow file is included in this repository.
 
+## Observability export (OpenTelemetry shape)
+
+```bash
+mizan-ledger export-otel ledger/ > mizan-events.jsonl          # or --out FILE; --agent / --version to filter
+```
+
+Each resolved declaration becomes one JSON line shaped like the OpenTelemetry GenAI event `gen_ai.evaluation.result`:
+`gen_ai.evaluation.name` = `mizan.calibration`, `gen_ai.evaluation.score.value` = squared error of the stated confidence
+(lower is better), `gen_ai.evaluation.score.label` = `correct`/`incorrect`, `gen_ai.evaluation.explanation`, and the
+commitment hash as the correlation id (`mizan.commitment`). Output goes to stdout or a file only: no network and no
+OpenTelemetry dependency; send the lines through your own collector. A ledger that does not verify is not exported.
+The OpenTelemetry GenAI conventions are still in "Development" status and may change.
+
 ## Local MCP server (optional)
 
 An optional stdio [MCP](https://modelcontextprotocol.io) server lets an agent host (Cursor, Claude Desktop, VS Code or any MCP client) use the ledger without leaving the machine. It needs Python >= 3.10; the core install is unchanged.
