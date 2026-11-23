@@ -1,112 +1,240 @@
-"""CI calibration gate: compare a ledger's Brier score with a committed baseline.
+"""CI calibration gate (Mizan Gate): compare this run's calibration with a committed baseline.
 
-    mizan-ledger gate <ledger_dir> --baseline baseline.json --max-brier-delta 0.02 --min-n 50
-    mizan-ledger gate <ledger_dir> --baseline baseline.json --write-baseline
+    mizan-ledger gate <ledger_dir | items.jsonl> --baseline mizan-baseline.json
+    mizan-ledger gate <ledger_dir | items.jsonl> --baseline mizan-baseline.json --write-baseline
 
-Exit codes
-  0  pass: calibration did not get worse beyond the allowed delta
-  1  fail: calibration got worse beyond the delta AND beyond the sampling interval, or the ledger does not verify
-  2  inconclusive: too few resolved records (or no baseline yet). This is a warning, never a pass or a fail.
+Input: a ledger directory, or a JSONL file with one item per line:
+    {"id": "q1", "confidence": 0.85, "correct": true}
+    {"id": "q2", "confidence": null, "correct": false}      # null = "I don't know" (abstained)
+JSONL items with a confidence are converted to a temporary ledger (declare, then resolve) so both inputs share one
+scoring path. Abstained items cannot be declared in a ledger (p must be in [0, 1]); they are counted for the abstain
+rate only and excluded from every other metric.
 
-The fail rule is deliberately conservative. With Brier B (baseline) and the current percentile-bootstrap 95% interval
-[lo, hi] from brier_interval(), the gate fails only when lo - B > max_delta: even the optimistic end of the current
-interval is worse than the baseline by more than the delta. A point estimate that is worse but whose interval still
-reaches back within the delta is reported as a pass with a note, because small samples are noisy.
+Metrics
+  can fail the run:  Brier score; overconfident-wrong share (wrong answers at confidence >= 0.9, as a share of
+                     answered items)
+  report only:       ECE (10 bins); abstain rate (null confidence, as a share of all items)
+
+Rules (thresholds are QANTS starting values, not industry standards; all are configurable)
+  * Fewer than --min-n answered items (default 50): the report says "not enough data", shows no score, exit 0.
+  * No baseline yet: the baseline is created from this run, the report says "inconclusive: baseline created", exit 0.
+    With --strict this case exits 2.
+  * Fail (exit 1) only when, for Brier or for the overconfident-wrong share, even the best (lowest) end of the current
+    percentile-bootstrap 95% interval is worse than the baseline value by more than that metric's threshold.
+    A point estimate that is worse but whose interval still reaches back within the threshold passes, with a note.
+  * A ledger that does not verify, or JSONL that cannot be read, exits 1.
+  * Otherwise exit 0.
 
 Pure standard library. No network. Reads only the public ledger files.
 """
 from __future__ import annotations
-import json
+import json, random, tempfile
 from pathlib import Path
 from typing import Optional
 
 from . import metrics
-from .core import verify_ledger_dir
+from .core import Ledger, LedgerError, verify_ledger_dir
 
-PASS, FAIL, INCONCLUSIVE = 0, 1, 2
-BASELINE_SCHEMA = "mizan-ledger-baseline/1"
+PASS, FAIL, STRICT_NO_BASELINE = 0, 1, 2
+INCONCLUSIVE = STRICT_NO_BASELINE          # kept for callers of the first version of this module
+BASELINE_SCHEMA = "mizan-ledger-baseline/2"
+THRESHOLD_LABEL = "QANTS starting values, not industry standards"
+DEFAULTS = {"min_n": 50, "max_brier_delta": 0.02, "max_ocw_delta": 0.02, "overconfident_at": 0.9}
+_REPS, _SEED = 2000, 20261116
 
 
-def _pairs(ledger_dir, agent: Optional[str], version: Optional[str]) -> list:
-    from .core import Ledger
-    return Ledger(ledger_dir, private_path=str(Path(ledger_dir) / ".noprivate")).pairs(agent, version)
+# ---------------------------------------------------------------------------------------------------------------------
+# inputs
+# ---------------------------------------------------------------------------------------------------------------------
+def read_jsonl_items(path) -> list:
+    """Parse and validate the JSONL item file. Raises LedgerError with the line number on bad input."""
+    items, seen = [], set()
+    with open(path, "r", encoding="utf-8") as f:
+        for i, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise LedgerError(f"{path}: line {i} is not valid JSON ({e})")
+            if not isinstance(obj, dict) or "id" not in obj or "confidence" not in obj or "correct" not in obj:
+                raise LedgerError(f"{path}: line {i} needs id, confidence and correct")
+            iid, c, ok = str(obj["id"]), obj["confidence"], obj["correct"]
+            if iid in seen:
+                raise LedgerError(f"{path}: line {i} repeats id {iid!r}")
+            seen.add(iid)
+            if not isinstance(ok, bool):
+                raise LedgerError(f"{path}: line {i}: correct must be true or false")
+            if c is not None and (isinstance(c, bool) or not isinstance(c, (int, float)) or not 0.0 <= float(c) <= 1.0):
+                raise LedgerError(f"{path}: line {i}: confidence must be a number in [0, 1] or null")
+            items.append({"id": iid, "confidence": None if c is None else float(c), "correct": ok})
+    return items
 
 
-def measure(ledger_dir, agent: Optional[str] = None, version: Optional[str] = None) -> dict:
-    """Verify the ledger and compute Brier (with interval), ECE and n for the selected agent/version."""
-    if not Path(ledger_dir).is_dir():
-        return {"ok": False, "errors": [f"not a directory: {ledger_dir}"], "n": 0}
-    rep = verify_ledger_dir(ledger_dir)
-    pairs = _pairs(ledger_dir, agent, version)
-    out = {"ok": rep["ok"], "errors": rep["errors"], "n": len(pairs), "agent_id": agent, "agent_version": version,
-           "chain_heads": rep.get("chain_heads")}
+def jsonl_to_ledger(items: list, ledger_dir, agent_id: str = "gate", version: str = "jsonl") -> int:
+    """Declare and resolve every answered item in a ledger at ledger_dir. Returns the number of abstained items."""
+    led = Ledger(ledger_dir, private_path=str(Path(ledger_dir) / "private"))
+    abstained = 0
+    for it in items:
+        if it["confidence"] is None:
+            abstained += 1
+            continue
+        led.declare(it["id"], it["confidence"], agent_id, version)
+        led.resolve(it["id"], it["correct"], agent_id, version)
+    return abstained
+
+
+def _load(source, agent=None, version=None) -> dict:
+    """Read a ledger dir or a JSONL file into {ok, errors, pairs, abstained, total, input}."""
+    src = Path(source)
+    if src.is_file():
+        try:
+            items = read_jsonl_items(src)
+        except (LedgerError, OSError) as e:
+            return {"ok": False, "errors": [str(e)], "input": "jsonl"}
+        with tempfile.TemporaryDirectory() as tmp:
+            abstained = jsonl_to_ledger(items, tmp)
+            rep = verify_ledger_dir(tmp)
+            pairs = Ledger(tmp, private_path=str(Path(tmp) / "private")).pairs()
+        return {"ok": rep["ok"], "errors": rep["errors"], "pairs": pairs, "abstained": abstained,
+                "total": len(items), "input": "jsonl"}
+    if not src.is_dir():
+        return {"ok": False, "errors": [f"not a ledger directory or JSONL file: {source}"], "input": "unknown"}
+    rep = verify_ledger_dir(src)
+    pairs = Ledger(src, private_path=str(src / ".noprivate")).pairs(agent, version)
+    # a ledger cannot hold "I don't know" (null confidence), so its abstain rate is 0 by construction
+    return {"ok": rep["ok"], "errors": rep["errors"], "pairs": pairs, "abstained": 0, "total": len(pairs),
+            "input": "ledger"}
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# metrics
+# ---------------------------------------------------------------------------------------------------------------------
+def _boot(values: list) -> list:
+    """Percentile bootstrap 95% interval of a mean (same method and seed as metrics.brier_interval)."""
+    n = len(values)
+    if n < 2:
+        return [None, None]
+    rng = random.Random(_SEED)
+    means = sorted(sum(values[rng.randrange(n)] for _ in range(n)) / n for _ in range(_REPS))
+    return [means[int(0.025 * _REPS)], means[int(0.975 * _REPS) - 1]]
+
+
+def measure(source, agent=None, version=None, overconfident_at: float = DEFAULTS["overconfident_at"]) -> dict:
+    d = _load(source, agent, version)
+    if not d["ok"]:
+        return {"ok": False, "errors": d["errors"], "n": 0, "input": d.get("input")}
+    pairs = d["pairs"]
+    out = {"ok": True, "errors": [], "input": d["input"], "n": len(pairs), "items": d["total"],
+           "abstained": d["abstained"], "abstain_rate": (d["abstained"] / d["total"]) if d["total"] else None}
     if pairs:
-        bi = metrics.brier_interval(pairs)
-        out.update(brier=bi["brier"], brier_ci95=bi["ci95"], brier_ci_method=bi["method"], ece=metrics.ece(pairs))
+        bi = metrics.brier_interval(pairs, reps=_REPS, seed=_SEED)
+        ocw = [1.0 if (p >= overconfident_at and not y) else 0.0 for p, y in pairs]
+        out.update(brier=bi["brier"], brier_ci95=bi["ci95"], ocw_share=sum(ocw) / len(ocw), ocw_ci95=_boot(ocw),
+                   ece=metrics.ece(pairs), ci_method=f"percentile bootstrap, {_REPS} reps, seed {_SEED}")
     return out
 
 
-def write_baseline(ledger_dir, baseline_path, min_n: int = 50, agent=None, version=None) -> tuple:
-    m = measure(ledger_dir, agent, version)
+def _thresholds(min_n, max_brier_delta, max_ocw_delta, overconfident_at) -> dict:
+    return {"min_n": min_n, "max_brier_delta": max_brier_delta, "max_ocw_delta": max_ocw_delta,
+            "overconfident_at": overconfident_at, "label": THRESHOLD_LABEL}
+
+
+def _scrub(m: dict) -> dict:
+    """Below min_n the report must not show any score."""
+    return {k: v for k, v in m.items() if k not in ("brier", "brier_ci95", "ocw_share", "ocw_ci95", "ece", "ci_method")}
+
+
+def _baseline_doc(m: dict, agent, version) -> dict:
+    return {"schema": BASELINE_SCHEMA, "agent_id": agent, "agent_version": version, "n": m["n"],
+            "brier": m["brier"], "brier_ci95": m["brier_ci95"], "ocw_share": m["ocw_share"], "ocw_ci95": m["ocw_ci95"],
+            "ece": m["ece"], "abstain_rate": m["abstain_rate"], "ci_method": m["ci_method"]}
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# gate
+# ---------------------------------------------------------------------------------------------------------------------
+def write_baseline(source, baseline_path, min_n=DEFAULTS["min_n"], agent=None, version=None,
+                   overconfident_at=DEFAULTS["overconfident_at"]) -> tuple:
+    m = measure(source, agent, version, overconfident_at)
+    th = _thresholds(min_n, DEFAULTS["max_brier_delta"], DEFAULTS["max_ocw_delta"], overconfident_at)
     if not m["ok"]:
-        return FAIL, {**m, "result": "fail", "reason": "ledger does not verify; refusing to write a baseline from it"}
+        return FAIL, {**m, "thresholds": th, "result": "fail", "reason": "input does not verify; no baseline written"}
     if m["n"] < min_n:
-        return INCONCLUSIVE, {**m, "result": "inconclusive",
-                              "reason": f"only {m['n']} resolved records (< min_n {min_n}); a baseline this small would be noise"}
-    base = {"schema": BASELINE_SCHEMA, "agent_id": agent, "agent_version": version, "n": m["n"], "brier": m["brier"],
-            "brier_ci95": m["brier_ci95"], "brier_ci_method": m["brier_ci_method"], "ece": m["ece"],
-            "chain_heads": m["chain_heads"]}
-    Path(baseline_path).write_text(json.dumps(base, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return PASS, {**m, "result": "baseline written", "baseline_path": str(baseline_path)}
+        return PASS, {**_scrub(m), "thresholds": th, "result": "not enough data",
+                      "reason": f"{m['n']} answered items (< min_n {min_n}); no baseline written and no score shown"}
+    Path(baseline_path).write_text(json.dumps(_baseline_doc(m, agent, version), indent=2, sort_keys=True) + "\n",
+                                   encoding="utf-8")
+    return PASS, {**m, "thresholds": th, "result": "baseline written", "reason": f"baseline written to {baseline_path}"}
 
 
-def check(ledger_dir, baseline_path, max_brier_delta: float = 0.02, min_n: int = 50, agent=None, version=None) -> tuple:
+def check(source, baseline_path, max_brier_delta=DEFAULTS["max_brier_delta"], min_n=DEFAULTS["min_n"], agent=None,
+          version=None, max_ocw_delta=DEFAULTS["max_ocw_delta"], overconfident_at=DEFAULTS["overconfident_at"],
+          strict: bool = False) -> tuple:
     """Returns (exit_code, report)."""
-    if max_brier_delta < 0:
-        raise ValueError("max_brier_delta must be >= 0")
-    m = measure(ledger_dir, agent, version)
+    if max_brier_delta < 0 or max_ocw_delta < 0:
+        raise ValueError("thresholds must be >= 0")
+    th = _thresholds(min_n, max_brier_delta, max_ocw_delta, overconfident_at)
+    m = measure(source, agent, version, overconfident_at)
     if not m["ok"]:
-        return FAIL, {**m, "result": "fail", "reason": "ledger does not verify (hash chain, openings or scores): " +
-                      "; ".join(m["errors"][:3])}
+        return FAIL, {**m, "thresholds": th, "result": "fail",
+                      "reason": "input does not verify or cannot be read: " + "; ".join(m["errors"][:3])}
+    if m["n"] < min_n:
+        return PASS, {**_scrub(m), "thresholds": th, "result": "not enough data",
+                      "reason": f"{m['n']} answered items (< min_n {min_n}); not enough data, no score shown"}
     bp = Path(baseline_path)
     if not bp.exists():
-        return INCONCLUSIVE, {**m, "result": "inconclusive",
-                              "reason": f"no baseline at {bp}; create one with --write-baseline once n >= {min_n}"}
+        bp.write_text(json.dumps(_baseline_doc(m, agent, version), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        rep = {**m, "thresholds": th, "result": "inconclusive: baseline created",
+               "reason": f"no baseline existed; created {bp} from this run (commit it so later runs compare against it)"}
+        return (STRICT_NO_BASELINE if strict else PASS), rep
     base = json.loads(bp.read_text(encoding="utf-8"))
-    rep = {**m, "baseline": {k: base.get(k) for k in ("n", "brier", "brier_ci95", "ece")}, "max_brier_delta": max_brier_delta,
-           "min_n": min_n}
-    if m["n"] < min_n:
-        return INCONCLUSIVE, {**rep, "result": "inconclusive",
-                              "reason": f"only {m['n']} resolved records (< min_n {min_n}); not enough to pass or fail"}
-    lo = m["brier_ci95"][0]
-    delta = m["brier"] - base["brier"]
-    rep["brier_delta"] = delta
-    if lo is not None and lo - base["brier"] > max_brier_delta:
-        return FAIL, {**rep, "result": "fail",
-                      "reason": f"Brier {m['brier']:.4f} vs baseline {base['brier']:.4f}: even the low end of the 95% interval "
-                                f"({lo:.4f}) is worse than the baseline by more than {max_brier_delta}"}
-    note = ""
-    if delta > max_brier_delta:
-        note = (f" Point estimate is worse by {delta:.4f}, but the 95% interval [{lo:.4f}, {m['brier_ci95'][1]:.4f}] "
-                f"still reaches back within the allowed delta, so this is not counted as a regression.")
-    return PASS, {**rep, "result": "pass", "reason": f"Brier {m['brier']:.4f} vs baseline {base['brier']:.4f} "
-                  f"(delta {delta:+.4f}, allowed {max_brier_delta}).{note}"}
+    rep = {**m, "thresholds": th, "baseline": {k: base.get(k) for k in ("n", "brier", "ocw_share", "ece", "abstain_rate")}}
+    failures, notes = [], []
+    for name, cur, ci, delta in (("Brier", m["brier"], m["brier_ci95"], max_brier_delta),
+                                 ("overconfident-wrong share", m["ocw_share"], m["ocw_ci95"], max_ocw_delta)):
+        b = base.get("brier" if name == "Brier" else "ocw_share")
+        if b is None:
+            notes.append(f"{name}: not in this baseline; not checked")
+            continue
+        lo = ci[0]
+        if lo is not None and lo - b > delta:
+            failures.append(f"{name} {cur:.4f} vs baseline {b:.4f}: even the low end of the 95% interval ({lo:.4f}) "
+                            f"is worse by more than {delta}")
+        elif cur - b > delta:
+            notes.append(f"{name}: point estimate worse by {cur - b:.4f}, but the 95% interval [{lo:.4f}, {ci[1]:.4f}] "
+                         f"still reaches back within {delta}; not counted as a regression")
+    rep["brier_delta"] = m["brier"] - base["brier"] if base.get("brier") is not None else None
+    rep["ocw_delta"] = m["ocw_share"] - base["ocw_share"] if base.get("ocw_share") is not None else None
+    if failures:
+        return FAIL, {**rep, "result": "fail", "reason": "; ".join(failures + notes)}
+    return PASS, {**rep, "result": "pass", "reason": "no regression beyond the thresholds" + ("; " + "; ".join(notes) if notes else "")}
 
 
 def markdown(code: int, rep: dict) -> str:
-    """A short Markdown job summary (for $GITHUB_STEP_SUMMARY)."""
-    label = {PASS: "PASS", FAIL: "FAIL", INCONCLUSIVE: "INCONCLUSIVE (warning)"}[code]
+    """A short Markdown job summary (for $GITHUB_STEP_SUMMARY). Shows no score when there is not enough data."""
+    result = rep.get("result", "")
+    label = {"pass": "PASS", "fail": "FAIL", "not enough data": "NOT ENOUGH DATA", "baseline written": "BASELINE WRITTEN",
+             "inconclusive: baseline created": "INCONCLUSIVE: BASELINE CREATED"}.get(result, result.upper())
+    th = rep.get("thresholds") or {}
     def f(x, d=4):
         return "n/a" if x is None else f"{x:.{d}f}"
-    ci = rep.get("brier_ci95") or [None, None]
-    base = rep.get("baseline") or {}
-    lines = [f"### Mizan calibration gate: {label}", "",
-             "| | current | baseline |", "|---|---|---|",
-             f"| n (resolved) | {rep.get('n', 0)} | {base.get('n', 'n/a')} |",
-             f"| Brier | {f(rep.get('brier'))} | {f(base.get('brier'))} |",
-             f"| Brier 95% interval | [{f(ci[0])}, {f(ci[1])}] | |",
-             f"| ECE | {f(rep.get('ece'))} | {f(base.get('ece'))} |", "",
-             f"{rep.get('reason', '')}", "",
-             "_Calibration of stated confidence against test outcomes only. It does not show that the agent is good, "
-             "safe or secure. Small n gives wide intervals; ECE is biased upward for small n._"]
+    def ci(v):
+        return f"[{f(v[0])}, {f(v[1])}]" if v else "n/a"
+    lines = [f"### Mizan calibration gate: {label}", ""]
+    if "brier" in rep:
+        base = rep.get("baseline") or {}
+        lines += ["| | current | 95% interval | baseline | fails the run? |", "|---|---|---|---|---|",
+                  f"| Brier | {f(rep.get('brier'))} | {ci(rep.get('brier_ci95'))} | {f(base.get('brier'))} | "
+                  f"yes, if worse by > {th.get('max_brier_delta')} |",
+                  f"| Overconfident-wrong share (wrong at confidence >= {th.get('overconfident_at')}) | "
+                  f"{f(rep.get('ocw_share'))} | {ci(rep.get('ocw_ci95'))} | {f(base.get('ocw_share'))} | "
+                  f"yes, if worse by > {th.get('max_ocw_delta')} |",
+                  f"| ECE (10 bins) | {f(rep.get('ece'))} | | {f(base.get('ece'))} | no, report only |",
+                  f"| Abstain rate | {f(rep.get('abstain_rate'))} | | {f(base.get('abstain_rate'))} | no, report only |", ""]
+    lines += [f"Answered items: {rep.get('n', 0)} of {rep.get('items', rep.get('n', 0))} (abstained: "
+              f"{rep.get('abstained', 0)}); minimum {th.get('min_n')}.", "", f"{rep.get('reason', '')}", "",
+              f"_Thresholds: {THRESHOLD_LABEL}. Calibration of stated confidence against your own outcomes only; it does "
+              "not show that the agent is good, safe or secure._"]
     return "\n".join(lines) + "\n"

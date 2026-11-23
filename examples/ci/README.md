@@ -1,25 +1,20 @@
-# Mizan calibration gate in CI
+# Mizan Gate in CI
 
-1. Mark tests with the confidence your agent (or you) declare **before** they run:
+1. Produce results, either way:
+   - pytest: mark tests with `@pytest.mark.confidence(p)` (the stated probability the test passes); the action runs
+     pytest with the plugin.
+   - your own eval harness: write `results.jsonl`, one line per item:
+     `{"id": "q1", "confidence": 0.85, "correct": true}`, with `confidence: null` for "I don't know".
+2. Copy `mizan-gate.yml` to `.github/workflows/` in your repository.
+3. The first run with at least 50 answered items creates `mizan-baseline.json`. Commit it so later runs compare
+   against it. With `strict: "true"` that first run fails (exit 2) instead of passing.
 
-   ```python
-   import pytest
+Exit codes of `mizan-ledger gate`:
 
-   @pytest.mark.confidence(0.9)
-   def test_parser():
-       ...
-   ```
+| Exit | Meaning |
+|---|---|
+| 0 | pass, not enough data (no score shown), or baseline created |
+| 1 | Brier or overconfident-wrong share worse beyond its threshold even at the best end of the 95% interval, or unreadable or unverified input |
+| 2 | no baseline yet, with `--strict` only |
 
-2. Run the suite once locally and write a baseline (needs at least `--min-n` resolved declarations, default 50):
-
-   ```bash
-   pytest --mizan-ledger-dir .mizan --mizan-agent-id my-agent
-   mizan-ledger gate .mizan --baseline mizan-baseline.json --write-baseline --agent my-agent
-   git add mizan-baseline.json
-   ```
-
-3. Copy `mizan-gate.yml` to `.github/workflows/` in your repository.
-
-Exit codes of `mizan-ledger gate`: `0` pass, `1` worse beyond the delta and beyond the 95% interval (or the ledger does not
-verify), `2` inconclusive (too few resolved declarations or no baseline; a warning, never a fake pass or fail).
-Keep `.mizan/private/` out of version control.
+Thresholds are QANTS starting values, not industry standards. Keep `.mizan/private/` out of version control.

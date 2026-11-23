@@ -60,27 +60,63 @@ Commitment = `SHA-256(canonical_json({agent_id, agent_version, p, salt, schema, 
 
 ## Add Mizan to CI in 5 minutes
 
-`mizan-ledger gate` compares this run's Brier score with a baseline you commit, and fails only when calibration got
-worse by more than `--max-brier-delta` **and** the low end of the current 95% bootstrap interval (`brier_interval()`)
-is still worse than that. Small samples never pass or fail by accident: below `--min-n` resolved declarations the gate
-exits `2` (inconclusive, a warning).
+`mizan-ledger gate` fails a pull request when your agent got more **confident and wrong** than on your main-branch
+baseline. It reads your own results; nothing leaves your machine.
 
-```bash
-pytest --mizan-ledger-dir .mizan --mizan-agent-id my-agent                  # tests marked @pytest.mark.confidence(p)
-mizan-ledger gate .mizan --baseline mizan-baseline.json --write-baseline   # once, then commit mizan-baseline.json
-mizan-ledger gate .mizan --baseline mizan-baseline.json --max-brier-delta 0.02 --min-n 50
+**Input**, either of:
+- a ledger directory written by the pytest plugin (tests marked `@pytest.mark.confidence(p)`), or
+- a JSONL file written by your own eval harness, one item per line:
+
+```json
+{"id": "q1", "confidence": 0.85, "correct": true}
+{"id": "q2", "confidence": null, "correct": false}
 ```
 
-| Exit | Meaning |
-|---|---|
-| 0 | pass |
-| 1 | calibration got worse beyond the delta and the interval, or the ledger does not verify |
-| 2 | inconclusive: fewer than `--min-n` resolved declarations, or no baseline yet |
+`confidence` is a number from 0 to 1, or `null` for "I don't know". JSONL items are converted to a ledger internally,
+so both inputs are scored the same way.
 
-In GitHub Actions, use the composite action in this repository (`action.yml`). It installs the package, runs pytest
-with the plugin, runs the gate and writes a job summary (Brier, ECE, n, interval, pass/fail). A ready workflow is in
-`examples/ci/`. The gate measures calibration of stated confidence against your test outcomes; it does not show that
-the agent is good, safe or secure.
+**Run it:**
+
+```bash
+mizan-ledger gate results.jsonl --baseline mizan-baseline.json     # or: mizan-ledger gate .mizan --baseline ...
+```
+
+**Metrics:**
+
+| Metric | Can fail the run? |
+|---|---|
+| Brier score | yes |
+| Overconfident-wrong share: wrong answers at confidence ≥ 0.9, as a share of answered items | yes |
+| ECE (10 bins) | no, reported only |
+| Abstain rate: `null` confidence, as a share of all items | no, reported only |
+
+`null` items count only toward the abstain rate; they are left out of Brier, ECE and the overconfident-wrong share.
+
+**Rules:**
+
+| Situation | Result | Exit |
+|---|---|---|
+| Fewer than `--min-n` answered items (default 50) | "not enough data", no score shown | 0 |
+| No baseline file yet | "inconclusive: baseline created" (commit the new file) | 0, or 2 with `--strict` |
+| Brier or overconfident-wrong share worse than the baseline by more than its threshold, **even at the best end of the 95% bootstrap interval** | fail | 1 |
+| Input does not verify or cannot be read | fail | 1 |
+| Otherwise | pass | 0 |
+
+A worse point estimate whose interval still reaches back within the threshold passes, with a note: small eval sets are
+noisy.
+
+**Thresholds** are QANTS starting values, not industry standards. Every report labels them so, and every one is a
+flag: `--max-brier-delta 0.02`, `--max-ocw-delta 0.02`, `--overconfident-at 0.9`, `--min-n 50`.
+`--write-baseline` refreshes the baseline on purpose.
+
+**GitHub Actions:** use the composite action in this repository (`action.yml`).
+- It runs pytest with the plugin, or reads your file when you set `jsonl:`.
+- It runs the gate and writes a job summary.
+- A ready workflow is in `examples/ci/`.
+- No account, key, wallet or token is needed.
+
+The gate measures calibration of stated confidence against your own outcomes. It does not show that the agent is good,
+safe or secure.
 
 ## Scores (`mizan_ledger.metrics`)
 

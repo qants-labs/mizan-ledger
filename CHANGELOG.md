@@ -1,9 +1,16 @@
 # Changelog
 
 ## 0.2.0 (prepared 2026-11-23, not yet released)
-- New `mizan-ledger gate` subcommand: CI calibration gate against a committed baseline (`--write-baseline` creates it).
-  Exit 0 pass, 1 worse beyond `--max-brier-delta` and beyond the 95% bootstrap interval (or the ledger does not verify),
-  2 inconclusive (fewer than `--min-n` resolved declarations, or no baseline). `--summary-md` appends a Markdown summary.
+- New `mizan-ledger gate` subcommand (Mizan Gate): a CI calibration gate against a committed baseline.
+  - Input: a ledger directory, or a JSONL file of `{id, confidence (0..1 or null), correct}` items. JSONL is converted
+    to a ledger internally, so both share one scoring path.
+  - Can fail the run (exit 1): Brier and the overconfident-wrong share (wrong at confidence >= 0.9, as a share of
+    answered items), each only when even the best end of the 95% bootstrap interval is worse than the baseline by more
+    than its threshold. A ledger that does not verify, or unreadable JSONL, also exits 1.
+  - Report only: ECE (10 bins) and abstain rate (`null` confidence).
+  - Below `--min-n` (default 50) answered items: "not enough data", no score, exit 0.
+  - No baseline: one is created from the run, "inconclusive: baseline created", exit 0 (exit 2 with `--strict`).
+  - Thresholds are configurable and labelled "QANTS starting values, not industry standards" in every report.
 - Composite GitHub Action (`action.yml` at the repository root) and an example workflow in `examples/ci/`.
 - Core stays dependency-free and offline.
 

@@ -1,6 +1,6 @@
 # Copy to .github/workflows/mizan-gate.yml in YOUR repository (this repository has no CI of its own).
-# It runs your tests with @pytest.mark.confidence(p) declarations and fails the job if calibration gets
-# worse than the committed baseline by more than the allowed delta. No secrets, no network beyond installing packages.
+# It fails the job when your agent gets more confident-and-wrong than the committed baseline.
+# No account, key, wallet or token is needed.
 name: mizan-gate
 on:
   pull_request:
@@ -11,9 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Option 1: your own eval harness writes results.jsonl ({id, confidence 0..1 or null, correct} per line)
+      # - run: python my_eval.py --out results.jsonl
       - uses: qants-labs/mizan-ledger@main   # pin to a release tag or commit SHA once one is published
         with:
-          baseline: mizan-baseline.json       # create once: mizan-ledger gate .mizan --write-baseline
-          max-brier-delta: "0.02"
-          min-n: "50"
+          jsonl: ""                          # set to results.jsonl for option 1; empty = run pytest with the plugin
+          baseline: mizan-baseline.json      # the first run creates it if missing: commit that file
           agent-id: my-agent
+          # thresholds are QANTS starting values, not industry standards:
+          # max-brier-delta: "0.02"
+          # max-ocw-delta: "0.02"
+          # min-n: "50"
+          # strict: "false"

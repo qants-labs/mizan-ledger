@@ -1,5 +1,5 @@
 name: "Mizan calibration gate"
-description: "Run your tests with mizan-ledger confidence declarations and fail CI if calibration (Brier) gets worse beyond a set delta."
+description: "Fail CI when your agent gets more confident-and-wrong: Brier and overconfident-wrong share vs a committed baseline."
 author: "QANTS"
 branding:
   icon: "check-circle"
@@ -10,16 +10,22 @@ inputs:
     description: "Python version to set up"
     default: "3.12"
   ledger-dir:
-    description: "Directory for the ledger written by this run"
+    description: "Directory for the ledger written by the pytest step (used when jsonl is empty)"
     default: ".mizan"
+  jsonl:
+    description: "Optional JSONL file written by your own eval harness ({id, confidence 0..1 or null, correct} per line). When set, the pytest step is skipped and the gate reads this file."
+    default: ""
   baseline:
-    description: "Baseline file committed to your repository (create it with: mizan-ledger gate <dir> --write-baseline)"
+    description: "Baseline file committed to your repository. If it does not exist, the first run creates it (commit it)."
     default: "mizan-baseline.json"
   max-brier-delta:
-    description: "Allowed worsening of the Brier score before the gate fails"
+    description: "Allowed worsening of the Brier score (QANTS starting value, not an industry standard)"
+    default: "0.02"
+  max-ocw-delta:
+    description: "Allowed rise of the overconfident-wrong share (QANTS starting value, not an industry standard)"
     default: "0.02"
   min-n:
-    description: "Minimum resolved declarations; below this the gate warns (exit 2) instead of passing or failing"
+    description: "Minimum answered items; below this the gate reports 'not enough data', shows no score and passes"
     default: "50"
   agent-id:
     description: "Agent id recorded in the ledger"
@@ -30,13 +36,13 @@ inputs:
   pytest-args:
     description: "Extra arguments for pytest (e.g. a test path)"
     default: ""
-  fail-on-inconclusive:
-    description: "Set to 'true' to fail the job when the gate is inconclusive (exit 2). Default: warn only."
+  strict:
+    description: "Set to 'true' to fail the job when there is no baseline yet (exit 2). Default: create it and pass."
     default: "false"
 
 outputs:
   result:
-    description: "pass | fail | inconclusive"
+    description: "pass | fail | not enough data | baseline created"
     value: ${{ steps.gate.outputs.result }}
 
 runs:
@@ -52,6 +58,7 @@ runs:
 
     - name: Run tests with confidence declarations
       id: tests
+      if: inputs.jsonl == ''
       shell: bash
       env:
         MIZAN_DIR: ${{ inputs.ledger-dir }}
@@ -67,29 +74,35 @@ runs:
       id: gate
       shell: bash
       env:
-        MIZAN_DIR: ${{ inputs.ledger-dir }}
+        MIZAN_INPUT: ${{ inputs.jsonl != '' && inputs.jsonl || inputs.ledger-dir }}
         MIZAN_BASELINE: ${{ inputs.baseline }}
         MIZAN_DELTA: ${{ inputs.max-brier-delta }}
+        MIZAN_OCW_DELTA: ${{ inputs.max-ocw-delta }}
         MIZAN_MIN_N: ${{ inputs.min-n }}
         MIZAN_AGENT: ${{ inputs.agent-id }}
         MIZAN_VERSION: ${{ inputs.agent-version }}
-        FAIL_INCONCLUSIVE: ${{ inputs.fail-on-inconclusive }}
+        MIZAN_STRICT: ${{ inputs.strict }}
+        MIZAN_JSONL: ${{ inputs.jsonl }}
       run: |
         set +e
-        mizan-ledger gate "$MIZAN_DIR" --baseline "$MIZAN_BASELINE" --max-brier-delta "$MIZAN_DELTA" --min-n "$MIZAN_MIN_N" \
-          --agent "$MIZAN_AGENT" --version "$MIZAN_VERSION" --summary-md "$GITHUB_STEP_SUMMARY"
+        args=(gate "$MIZAN_INPUT" --baseline "$MIZAN_BASELINE" --max-brier-delta "$MIZAN_DELTA" --max-ocw-delta "$MIZAN_OCW_DELTA" \
+              --min-n "$MIZAN_MIN_N" --summary-md "$GITHUB_STEP_SUMMARY")
+        if [ -z "$MIZAN_JSONL" ]; then args+=(--agent "$MIZAN_AGENT" --version "$MIZAN_VERSION"); fi
+        if [ "$MIZAN_STRICT" = "true" ]; then args+=(--strict); fi
+        mizan-ledger "${args[@]}" > "$RUNNER_TEMP/mizan-gate.json"
         code=$?
+        cat "$RUNNER_TEMP/mizan-gate.json"
+        result=$(python -c "import json,sys; print(json.load(open(sys.argv[1])).get('result',''))" "$RUNNER_TEMP/mizan-gate.json")
+        echo "result=$result" >> "$GITHUB_OUTPUT"
         case "$code" in
-          0) echo "result=pass" >> "$GITHUB_OUTPUT" ;;
-          1) echo "result=fail" >> "$GITHUB_OUTPUT"; echo "::error title=Mizan calibration gate::calibration got worse beyond the allowed delta (see job summary)" ;;
-          2) echo "result=inconclusive" >> "$GITHUB_OUTPUT"; echo "::warning title=Mizan calibration gate::inconclusive (too few resolved declarations or no baseline); see job summary"
-             if [ "$FAIL_INCONCLUSIVE" = "true" ]; then exit 1; fi; code=0 ;;
-          *) echo "result=fail" >> "$GITHUB_OUTPUT" ;;
+          0) [ "$result" = "pass" ] || echo "::notice title=Mizan calibration gate::$result (see job summary)" ;;
+          1) echo "::error title=Mizan calibration gate::calibration got worse beyond the thresholds, or the input does not verify (see job summary)" ;;
+          2) echo "::error title=Mizan calibration gate::no baseline yet and strict mode is on; a baseline was created, commit it" ;;
         esac
         exit "$code"
 
     - name: Fail if the tests failed
-      if: steps.tests.outputs.code != '0'
+      if: inputs.jsonl == '' && steps.tests.outputs.code != '0'
       shell: bash
       run: |
         echo "::error title=Tests::pytest exited with ${{ steps.tests.outputs.code }}"
