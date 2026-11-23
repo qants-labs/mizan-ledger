@@ -30,6 +30,8 @@ SeedAgents = "https://qants-site.qants.workers.dev/seed-agents"
 dev = ["pytest>=7"]
 # Optional local stdio MCP server. The core install stays dependency-free and offline.
 mcp = ["mcp>=2.3,<3; python_version >= '3.10'"]
+# Optional Inspect AI scorer (mizan_ledger.adapters.inspect_scorer). The core install stays dependency-free.
+inspect = ["inspect_ai>=0.3.200; python_version >= '3.10'"]
 
 [project.scripts]
 mizan-ledger = "mizan_ledger.cli:main"
@@ -37,6 +39,9 @@ mizan-ledger-mcp = "mizan_ledger.mcp_server:main"
 
 [project.entry-points.pytest11]
 mizan_ledger = "mizan_ledger.pytest_plugin"
+
+[project.entry-points.inspect_ai]
+mizan_ledger = "mizan_ledger.adapters._inspect_registry"
 
 [tool.setuptools.packages.find]
 where = ["src"]

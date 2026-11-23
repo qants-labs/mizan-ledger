@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (for 0.2.0; prepared 2026-11-23)
+- promptfoo Python assertion `examples/promptfoo/mizan_assert.py` (records stated confidence + pass/fail, returns pass/score/reason).
+- Optional extra `mizan-ledger[inspect]`: Inspect AI scorer `mizan_calibration` (wraps an inner scorer, adds a `brier`
+  metric) and an `inspect_ai` entry point so `inspect eval --scorer mizan_ledger/mizan_calibration` finds it by name.
+  The core install stays dependency-free.
+
 ## 0.1.5 (prepared 2026-11-18, not yet released)
 - Adds an `mcp-name` marker (`io.github.qants-labs/mizan-ledger`) so the MCP Registry can verify ownership under the QANTS organization namespace.
 - Adds a `mizan-ledger mcp` subcommand that starts the same optional stdio MCP server as the existing `mizan-ledger-mcp` script (requires `pip install "mizan-ledger[mcp]"`). If the extra is missing, the command prints an install hint and exits nonzero.
