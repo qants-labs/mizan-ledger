@@ -78,3 +78,15 @@ def test_no_network_or_exec_imports():
         elif isinstance(n, ast.Attribute):
             assert n.attr not in ("system", "popen", "spawn")
     assert mods <= {"__future__", "os", "pathlib", "typing", "mcp"}, mods
+
+
+def test_should_act_tool(env):
+    r = srv.should_act(0.5, 0.9)
+    assert r["decision"] == "ABSTAIN" and r["adjusted"] is False and "agent_id" in r
+    assert not (env / "pub").exists()                      # read-only without commit
+    r = srv.should_act(0.95, 0.9, task_id="send-email", commit=True)
+    assert r["decision"] == "ACT" and r["receipt"]["seq"] == 1
+    assert srv.get_calibration()["declared"] == 1
+    for bad in (True, "0.9", 1.5):
+        with pytest.raises(ValueError):
+            srv.should_act(bad, 0.9)

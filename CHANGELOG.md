@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (for 0.2.0; prepared 2026-11-23)
+- Pre-action gate `mizan_ledger.gate.should_act(p, risk_threshold, ledger=None, agent_id=None)`: ACT only if
+  p >= risk_threshold, otherwise ABSTAIN with a reason. With >= 50 resolved records, p is adjusted from the agent's
+  reliability table (raw and adjusted both reported); with fewer, raw p is used and the reason says so. Optional
+  `commit=True` declares the stated p first. New MCP tool `should_act` with the same behaviour (writes only when commit=true).
+
 ## 0.1.5 (prepared 2026-11-18, not yet released)
 - Adds an `mcp-name` marker (`io.github.qants-labs/mizan-ledger`) so the MCP Registry can verify ownership under the QANTS organization namespace.
 - Adds a `mizan-ledger mcp` subcommand that starts the same optional stdio MCP server as the existing `mizan-ledger-mcp` script (requires `pip install "mizan-ledger[mcp]"`). If the extra is missing, the command prints an install hint and exits nonzero.

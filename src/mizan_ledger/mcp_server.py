@@ -1,14 +1,14 @@
 """Local stdio MCP server for mizan-ledger (optional extra: pip install "mizan-ledger[mcp]").
 
-Four tools wrap the offline Ledger: commit_confidence, resolve_outcome,
-get_calibration, verify_ledger.
+Five tools wrap the offline Ledger: commit_confidence, resolve_outcome,
+get_calibration, verify_ledger, should_act.
 
 Safety contract
   * stdio only. No network calls, no telemetry, no API keys, no secrets.
   * No shell or subprocess execution, no financial actions.
   * Writes only append-only ledger files under MIZAN_LEDGER_DIR / MIZAN_PRIVATE_DIR
-    (commit_confidence, resolve_outcome). get_calibration and verify_ledger are read-only
-    and never create directories.
+    (commit_confidence, resolve_outcome, and should_act only when commit=true). get_calibration
+    and verify_ledger are read-only and never create directories.
   * Scores stated confidence against an outcome the caller supplies. It cannot verify
     that a claimed success is true.
 
@@ -29,6 +29,7 @@ except ImportError as exc:  # pragma: no cover - only without the extra
 
 from . import __version__
 from .core import Ledger, LedgerError, verify_ledger_dir
+from .gate import should_act as _should_act
 
 class LedgerToolError(ToolError, ValueError):
     """Expected input/ledger error: its message is returned to the client as a tool error."""
@@ -141,6 +142,37 @@ def verify_ledger(ledger_dir: Optional[str] = None) -> dict[str, Any]:
     rep["ledger_dir"] = str(d)
     rep["note"] = "A valid chain proves the files were not edited after the fact relative to each other; timestamps are the local clock until the chain head is anchored independently."
     return rep
+
+
+@mcp.tool(annotations=_WRITE)
+def should_act(p: float, risk_threshold: float, agent_id: Optional[str] = None, agent_version: Optional[str] = None,
+               task_id: Optional[str] = None, commit: bool = False) -> dict[str, Any]:
+    """Pre-action gate: ACT only if the agent's confidence p >= risk_threshold, otherwise ABSTAIN with a reason.
+
+    If the local ledger holds >= 50 resolved records for the agent, p is adjusted with the agent's own reliability
+    table and both raw and adjusted p are returned; with fewer, raw p is used and the reason says so. With
+    commit=true and a task_id, the stated p is declared in the ledger first, so the task is scored whether the agent
+    acts or abstains. Writes nothing unless commit=true.
+    """
+    for name, v in (("p", p), ("risk_threshold", risk_threshold)):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise LedgerToolError(f"{name} must be a number in [0, 1]")
+    aid = agent_id or _default_agent_id()
+    d = _public_dir()
+    led = None
+    if commit:
+        led = _writable_ledger()
+    elif d.is_dir():
+        led = Ledger(d, private_path=_private_dir())   # directory exists; pairs() reads only public files
+    try:
+        dec = _should_act(float(p), float(risk_threshold), ledger=led, agent_id=aid, version=agent_version,
+                          task_id=task_id, commit=bool(commit))
+    except LedgerError as e:
+        raise LedgerToolError(str(e)) from e
+    out = dec.to_dict()
+    out["agent_id"] = aid
+    out["note"] = "Based on stated confidence and past calibration only; it cannot verify the agent's reasoning."
+    return out
 
 
 def main() -> None:
