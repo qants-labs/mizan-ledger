@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (for 0.2.0; prepared 2026-11-23)
+- Naming: README headline and a new `server.json` use "QANTS Mizan Ledger: calibration (Brier) for AI agents" so this
+  package is clearly distinct from the many unrelated MCP servers named "mizan". Nothing was published.
+
 ## 0.1.5 (prepared 2026-11-18, not yet released)
 - Adds an `mcp-name` marker (`io.github.qants-labs/mizan-ledger`) so the MCP Registry can verify ownership under the QANTS organization namespace.
 - Adds a `mizan-ledger mcp` subcommand that starts the same optional stdio MCP server as the existing `mizan-ledger-mcp` script (requires `pip install "mizan-ledger[mcp]"`). If the extra is missing, the command prints an install hint and exits nonzero.

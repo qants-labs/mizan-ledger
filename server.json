@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.qants-labs/mizan-ledger",
+  "title": "QANTS Mizan Ledger: calibration (Brier) for AI agents",
+  "description": "QANTS Mizan Ledger: local, offline calibration ledger (Brier, ECE) for AI agents. Hash-only.",
+  "version": "0.2.0",
+  "websiteUrl": "https://qants-site.qants.workers.dev/library",
+  "repository": {
+    "url": "https://github.com/qants-labs/mizan-ledger",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "mizan-ledger",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
