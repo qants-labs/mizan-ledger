@@ -1,4 +1,4 @@
-# QANTS Mizan Ledger: calibration (Brier) for AI agents
+# QANTS Mizan — agent calibration check
 
 Python package `mizan-ledger`, published by QANTS. Not related to other projects named "mizan".
 

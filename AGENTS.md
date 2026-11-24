@@ -57,10 +57,10 @@ Run both suites before proposing a change. Never skip or weaken a failing test t
 
 - Target Python 3.9 or later. Keep the core library dependency-free.
 - Do not reformat unrelated files. Match the existing style.
-- There is no CI workflow in this repository. Do not add `.github/` workflows unless the maintainer asks for one.
+- The only workflow is `.github/workflows/publish-mcp.yml` (manual MCP Registry publish). Do not add `.github/` workflows unless the maintainer asks for one.
 - Work on a branch and open a pull request; do not push to `main` directly.
 - A declaration cannot be replaced or re-resolved; deleting or editing a record must break the hash chain so `verify` fails. Do not add APIs that rewrite history.
 - Coverage must keep being reported (declared, resolved, pending).
-- If you add an optional MCP extra, keep it optional: the core install must stay offline and dependency-free. A local stdio MCP server is a wrapper around `Ledger`, not a remote service. Do not point a registry listing at the site's remote `/mcp` endpoint; that endpoint is the Mizan benchmark and Diwan directory, a different product.
+- If you add an optional MCP extra, keep it optional: the core install must stay offline and dependency-free. A local stdio MCP server is a wrapper around `Ledger`, not a remote service. The registry entry `io.github.qants-labs/mizan` (published manually by `.github/workflows/publish-mcp.yml`) points at the site's remote `/mcp` endpoint by maintainer decision; do not add other remote listings without approval.
 - Do not name a private individual as author in new public metadata. The publisher is QANTS.
 - Public times, when needed, are GMT+2. Do not name a country.

@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       # Option 1: your own eval harness writes results.jsonl ({id, confidence 0..1 or null, correct} per line)
       # - run: python my_eval.py --out results.jsonl
-      - uses: qants-labs/mizan-ledger@main   # pin to a release tag or commit SHA once one is published
+      - uses: qants-labs/mizan-ledger@v1   # moving major tag; pin to v1.0.0 or a commit SHA for full reproducibility
         with:
           jsonl: ""                          # set to results.jsonl for option 1; empty = run pytest with the plugin
           baseline: mizan-baseline.json      # kept in the Actions cache (saved on main pushes, restored on PRs);
