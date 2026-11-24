@@ -1,0 +1,26 @@
+# Copy to .github/workflows/mizan-gate.yml in YOUR repository (this repository has no CI of its own).
+# It fails the job when your agent gets more confident-and-wrong than the committed baseline.
+# No account, key, wallet or token is needed.
+name: mizan-gate
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  calibration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Option 1: your own eval harness writes results.jsonl ({id, confidence 0..1 or null, correct} per line)
+      # - run: python my_eval.py --out results.jsonl
+      - uses: qants-labs/mizan-ledger@main   # pin to a release tag or commit SHA once one is published
+        with:
+          jsonl: ""                          # set to results.jsonl for option 1; empty = run pytest with the plugin
+          baseline: mizan-baseline.json      # kept in the Actions cache (saved on main pushes, restored on PRs);
+                                             # or commit a file, e.g. .mizan/baseline.json, to use it as is
+          agent-id: my-agent
+          # thresholds are QANTS starting values, not industry standards:
+          # max-brier-delta: "0.02"
+          # max-ocw-delta: "0.02"
+          # min-n: "50"
+          # strict: "false"
