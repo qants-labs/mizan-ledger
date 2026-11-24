@@ -4,7 +4,7 @@
 
 Declare how confident your agent is **before** a task, commit a salted hash of that declaration, then score honesty against the **real outcome** (your own tests, evals or checks). Local-first, hash-only, verifiable offline.
 
-> Status: **v0.1.5, early alpha** by QANTS. On PyPI (not on npm). MIT licensed (see `LICENSE`). No network access, no telemetry, no dependencies in the core library.
+> Status: **v0.2.0 (prepared, not yet released), early alpha** by QANTS. On PyPI (not on npm). MIT licensed (see `LICENSE`). No network access, no telemetry, no dependencies in the core library.
 
 ## Why
 
@@ -57,6 +57,77 @@ Commitment = `SHA-256(canonical_json({agent_id, agent_version, p, salt, schema, 
 - The library cannot tell whether the outcome you pass to `resolve` is honest. Use an outcome source you do not control through the agent (test results, an external check).
 - Small samples give wide intervals; ECE is biased upward for small n. The summary prints the interval and `n`; read them.
 - Scores are about calibration, not about whether the agent is good, safe or secure.
+
+## Add Mizan to CI in 5 minutes
+
+`mizan-ledger gate` fails a pull request when your agent got more **confident and wrong** than on your main-branch
+baseline. It reads your own results; nothing leaves your machine.
+
+**Input**, either of:
+- a ledger directory written by the pytest plugin (tests marked `@pytest.mark.confidence(p)`), or
+- a JSONL file written by your own eval harness, one item per line:
+
+```json
+{"id": "q1", "confidence": 0.85, "correct": true}
+{"id": "q2", "confidence": null, "correct": false}
+```
+
+`confidence` is a number from 0 to 1, or `null` for "I don't know". JSONL items are converted to a ledger internally,
+so both inputs are scored the same way.
+
+**Run it:**
+
+```bash
+mizan-ledger gate results.jsonl --baseline mizan-baseline.json     # or: mizan-ledger gate .mizan --baseline ...
+```
+
+**Metrics:**
+
+| Metric | Can fail the run? |
+|---|---|
+| Brier score | yes |
+| Overconfident-wrong share: wrong answers at confidence ≥ 0.9, as a share of answered items | yes |
+| ECE (10 bins) | no, reported only |
+| Abstain rate: `null` confidence, as a share of all items | no, reported only. With ledger input: "not recorded (ledger format)", because a ledger cannot hold a `null` confidence |
+
+`null` items count only toward the abstain rate; they are left out of Brier, ECE and the overconfident-wrong share.
+Every report states "answered N of M items", including when there is not enough data.
+
+**Rules:**
+
+| Situation | Result | Exit |
+|---|---|---|
+| Fewer than `--min-n` answered items (default 50) | "not enough data", no score shown | 0 |
+| No baseline file yet | "inconclusive: baseline created" (commit the new file) | 0, or 2 with `--strict` |
+| Brier or overconfident-wrong share worse than the baseline by more than its threshold, **even at the best end of the 95% bootstrap interval** | fail | 1 |
+| Input does not verify or cannot be read | fail | 1 |
+| Otherwise | pass | 0 |
+
+A worse point estimate whose interval still reaches back within the threshold passes, with a note: small eval sets are
+noisy.
+
+**Thresholds** are QANTS starting values, not industry standards. Every report labels them so, and every one is a
+flag: `--max-brier-delta 0.02`, `--max-ocw-delta 0.02`, `--overconfident-at 0.9`, `--min-n 50`.
+`--write-baseline` refreshes the baseline on purpose.
+
+**Where the baseline lives in CI**, one of:
+- **Actions cache (default).**
+  - A push to the default branch saves that run's baseline under `mizan-baseline-<agent-id>-<run id>`.
+  - A pull request restores the newest one for the same `agent-id`.
+  - If none exists yet, the run reports "inconclusive: baseline created" and passes.
+  - Caches expire after a period without use, after which the next run starts a fresh baseline.
+- **A committed file.** Set `baseline: .mizan/baseline.json` and commit that file to the default branch.
+  - The action then uses it as is and never touches the cache.
+  - Refresh it on purpose with `mizan-ledger gate <input> --baseline .mizan/baseline.json --write-baseline`.
+
+**GitHub Actions:** use the composite action in this repository (`action.yml`).
+- It runs pytest with the plugin, or reads your file when you set `jsonl:`.
+- It runs the gate and writes a job summary.
+- A ready workflow is in `examples/ci/`.
+- No account, key, wallet or token is needed.
+
+The gate measures calibration of stated confidence against your own outcomes. It does not show that the agent is good,
+safe or secure.
 
 ## Scores (`mizan_ledger.metrics`)
 
