@@ -1,4 +1,6 @@
-# mizan-ledger
+# QANTS Mizan — agent calibration check
+
+Python package `mizan-ledger`, published by QANTS. Not related to other projects named "mizan".
 
 <!-- mcp-name: io.github.qants-labs/mizan-ledger -->
 

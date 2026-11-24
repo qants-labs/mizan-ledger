@@ -17,8 +17,10 @@
 - Reports always state "answered N of M items". With ledger input the abstain rate is "not recorded (ledger format)",
   never 0.
 - Core stays dependency-free and offline.
+- Naming: the README headline, `server.json` titles and the Action name are "QANTS Mizan — agent calibration check", so
+  this project is clearly distinct from the many unrelated MCP servers named "mizan".
 
-## 0.1.5 (prepared 2026-11-18, not yet released)
+## 0.1.5 (2026-11-19, on PyPI)
 - Adds an `mcp-name` marker (`io.github.qants-labs/mizan-ledger`) so the MCP Registry can verify ownership under the QANTS organization namespace.
 - Adds a `mizan-ledger mcp` subcommand that starts the same optional stdio MCP server as the existing `mizan-ledger-mcp` script (requires `pip install "mizan-ledger[mcp]"`). If the extra is missing, the command prints an install hint and exits nonzero.
 

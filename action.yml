@@ -1,4 +1,4 @@
-name: "Mizan calibration gate"
+name: "QANTS Mizan — agent calibration check"
 description: "Fail CI when your agent gets more confident-and-wrong: Brier and overconfident-wrong share vs a committed baseline."
 author: "QANTS"
 branding:
