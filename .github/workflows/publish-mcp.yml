@@ -17,9 +17,9 @@ jobs:
           {
             "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
             "name": "io.github.qants-labs/mizan",
-            "title": "Mizan calibration benchmark",
-            "description": "Does your agent say 'I don't know' at the right time? Brier-scored calibration passports.",
-            "version": "1.1.0",
+            "title": "QANTS Mizan — agent calibration check",
+            "description": "QANTS Mizan — does your AI agent know when it doesn't know? Free calibration check, testnet only.",
+            "version": "1.1.1",
             "websiteUrl": "https://qants-site.qants.workers.dev/mizan",
             "repository": { "url": "https://github.com/qants-labs/mizan-ledger", "source": "github" },
             "remotes": [

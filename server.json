@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.qants-labs/mizan-ledger",
   "title": "QANTS Mizan — agent calibration check",
-  "description": "Local, offline calibration ledger (Brier, ECE) for AI agents, by QANTS. Hash-only.",
+  "description": "QANTS Mizan — does your AI agent know when it doesn't know? Free calibration check, testnet only.",
   "version": "1.1.1",
   "websiteUrl": "https://qants-site.qants.workers.dev/library",
   "repository": {
