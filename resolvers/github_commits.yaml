@@ -1,0 +1,43 @@
+# Mizan resolver: number of commits on a public GitHub repository's default branch in a UTC window.
+# No token: the REST API is called unauthenticated (60 requests/hour per IP). The second source is the
+# repository itself over the git protocol, so the two counts come through independent channels.
+id: github_commits
+version: 1.0.0
+category: software
+entity:
+  repository: question.repository
+  branch: default
+  description: "Commits reachable from the default branch whose committer date falls in [start, end)"
+period:
+  start: question.window_start
+  end: question.window_end
+  timezone: UTC
+sources:
+  - id: github_rest
+    name: GitHub REST API, unauthenticated
+    url: "https://api.github.com/repos/{repository}/commits?since={start}&until={end}&per_page=100&page={page}"
+    extract: "count of commits over all pages; stops and reports unavailable when X-RateLimit-Remaining is 0"
+    fallback_pre_approved: true
+  - id: git_protocol
+    name: git clone over HTTPS (public, no credentials)
+    url: "https://github.com/{repository}.git"
+    extract: "git rev-list --count --since={start} --until={end} HEAD on a blob-less bare clone"
+    fallback_pre_approved: false
+normalization:
+  timestamps: UTC
+  value: integer commit count
+  combine: the counts must be equal (tolerance 0); the agreed count is used
+tolerance:
+  absolute: 0
+missing_or_late:
+  wait_after_close_minutes: 10
+  retries: 2
+  rate_limit: "stop when X-RateLimit-Remaining is 0; never authenticate to get around it"
+  single_source: allowed_if_pre_approved
+  no_source: UNRESOLVED
+outcome_rule:
+  value: count
+  comparator: question.comparator
+  threshold: question.threshold
+  results: ["YES", "NO", "DISPUTED", "UNRESOLVED"]
+reproduce: "mizan resolve --question-id {question_id} --reproduce"

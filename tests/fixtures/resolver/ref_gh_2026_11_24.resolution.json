@@ -1,0 +1,34 @@
+{
+  "confidence": "high",
+  "outcome": "YES",
+  "question_id": "ref_gh_2026_11_24",
+  "raw_values": {
+    "close_utc": "2026-11-25T00:00:00Z",
+    "combined": 8.0,
+    "git_protocol": 8.0,
+    "github_rest": 8.0
+  },
+  "resolved_at": "2026-11-25T23:29:06Z",
+  "resolver_hash": "sha256:2c22d6bb3678fa29a13eb40d8abc34ab9bc00609e5f8cbd5cb038122444b193f",
+  "resolver_version": "1.0.0",
+  "sources": [
+    {
+      "available": true,
+      "body_sha256": "sha256:7194f87890d1a8d336edca56837c5ffd07dca2e1c8103a171acd46626638b183",
+      "fallback_pre_approved": true,
+      "id": "github_rest",
+      "request_time": "2026-11-25T23:29:06Z",
+      "status": 200,
+      "url": "https://api.github.com/repos/qants-labs/mizan-ledger/commits?since=2026-11-24T00%3A00%3A00Z&until=2026-11-25T00%3A00%3A00Z&per_page=100&page=1"
+    },
+    {
+      "available": true,
+      "body_sha256": "sha256:2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3",
+      "fallback_pre_approved": false,
+      "id": "git_protocol",
+      "request_time": "2026-11-25T23:29:06Z",
+      "status": 200,
+      "url": "https://github.com/qants-labs/mizan-ledger.git"
+    }
+  ]
+}

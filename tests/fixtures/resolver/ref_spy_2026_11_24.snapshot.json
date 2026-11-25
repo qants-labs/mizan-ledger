@@ -1,0 +1,26 @@
+{
+ "log": [
+  {
+   "body": "{\"chart\":{\"result\":[{\"meta\":{\"currency\":\"USD\",\"symbol\":\"SPY\",\"exchangeName\":\"PCX\",\"fullExchangeName\":\"NYSEArca\",\"instrumentType\":\"ETF\",\"firstTradeDate\":728317800,\"regularMarketTime\":1795640400,\"hasPrePostMarketData\":true,\"gmtoffset\":-18000,\"timezone\":\"EST\",\"exchangeTimezoneName\":\"America/New_York\",\"regularMarketPrice\":716.7,\"regularMarketChangePercent\":-0.289,\"fulldayPrice\":717.009,\"fulldayChange\":-1.771,\"fulldayChangePercent\":-0.246,\"fiftyTwoWeekHigh\":781.62,\"fiftyTwoWeekLow\":629.28,\"regularMarketDayHigh\":718.43,\"regularMarketDayLow\":695.45,\"regularMarketVolume\":72380475,\"longName\":\"State Street SPDR S&P 500 ETF Trust\",\"shortName\":\"State Street SPDR S&P 500 ETF T\",\"chartPreviousClose\":722.29,\"priceHint\":2,\"currentTradingPeriod\":{\"pre\":{\"timezone\":\"EST\",\"end\":1795617000,\"start\":1795597200,\"gmtoffset\":-18000},\"regular\":{\"timezone\":\"EST\",\"end\":1795640400,\"start\":1795617000,\"gmtoffset\":-18000},\"post\":{\"timezone\":\"EST\",\"end\":1795654800,\"start\":1795640400,\"gmtoffset\":-18000}},\"dataGranularity\":\"1d\",\"range\":\"\",\"validRanges\":[\"1d\",\"5d\",\"1mo\",\"3mo\",\"6mo\",\"1y\",\"2y\",\"5y\",\"10y\",\"ytd\",\"max\"]},\"timestamp\":[1795530600],\"indicators\":{\"quote\":[{\"low\":[712.1400146484375],\"high\":[720.9299926757812],\"open\":[715.1500244140625],\"close\":[718.780029296875],\"volume\":[64343200]}],\"adjclose\":[{\"adjclose\":[718.780029296875]}]}}],\"error\":null}}",
+   "body_sha256": "sha256:e2434013fe4866f22bc62015d64d1f317689f5122dbe6aca4c690d221bf21eb8",
+   "headers": {},
+   "request_time": "2026-11-25T23:29:05Z",
+   "source": "yahoo",
+   "status": 200,
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=1795478400&period2=1795564800"
+  },
+  {
+   "body": "{\"data\":{\"symbol\":\"SPY\",\"totalRecords\":1,\"tradesTable\":{\"asOf\":null,\"headers\":{\"date\":\"Date\",\"close\":\"Close/Last\",\"volume\":\"Volume\",\"open\":\"Open\",\"high\":\"High\",\"low\":\"Low\"},\"rows\":[{\"date\":\"11/24/2026\",\"close\":\"718.78\",\"volume\":\"64,343,210\",\"open\":\"715.148\",\"high\":\"720.93\",\"low\":\"712.14\"}]}},\"message\":null,\"status\":{\"rCode\":200,\"bCodeMessage\":null,\"developerMessage\":null}}",
+   "body_sha256": "sha256:8e3893a7193debabfeeb8562ea662102451cbeb3b9a8193e6dc7eb0429055622",
+   "headers": {},
+   "request_time": "2026-11-25T23:29:06Z",
+   "source": "nasdaq",
+   "status": 200,
+   "url": "https://api.nasdaq.com/api/quote/SPY/historical?assetclass=etf&fromdate=2026-11-24&todate=2026-11-25&limit=5"
+  }
+ ],
+ "question_hash": "sha256:24f571bc6b3706bcea7d217bcbcbd5c98a0f9a5d10be8c643fb6ef2be0bfff1d",
+ "question_id": "ref_spy_2026_11_24",
+ "resolved_at": "2026-11-25T23:29:05Z",
+ "resolver_hash": "sha256:b336cf695171841440389435dd4654c9676f2539742277fdd55c0bfc4dc800ba"
+}

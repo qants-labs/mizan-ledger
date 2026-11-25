@@ -1,0 +1,34 @@
+{
+  "confidence": "high",
+  "outcome": "YES",
+  "question_id": "ref_xrp_2026_11_25",
+  "raw_values": {
+    "close_utc": "2026-11-25T00:00:00Z",
+    "coingecko": 0.924149200519897,
+    "combined": 0.9240296002599485,
+    "kraken": 0.92391
+  },
+  "resolved_at": "2026-11-25T23:29:05Z",
+  "resolver_hash": "sha256:ebf319c7007a081dc7a7998acec1746332870e721efd072f756e725ddb267671",
+  "resolver_version": "1.0.0",
+  "sources": [
+    {
+      "available": true,
+      "body_sha256": "sha256:23a0cbeb9b8bdb64fa9af90db9cb40359346868be2e33152378ee14fca1e5f61",
+      "fallback_pre_approved": true,
+      "id": "coingecko",
+      "request_time": "2026-11-25T23:29:05Z",
+      "status": 200,
+      "url": "https://api.coingecko.com/api/v3/coins/ripple/history?date=25-11-2026&localization=false"
+    },
+    {
+      "available": true,
+      "body_sha256": "sha256:42cba8850a669bab2a178337dec6f03ae88b70eb77795707b28b11427c3b04ac",
+      "fallback_pre_approved": true,
+      "id": "kraken",
+      "request_time": "2026-11-25T23:29:05Z",
+      "status": 200,
+      "url": "https://api.kraken.com/0/public/OHLC?pair=XRPUSD&interval=1440&since=1795478399"
+    }
+  ]
+}

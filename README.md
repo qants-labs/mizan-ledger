@@ -4,9 +4,23 @@ Python package `mizan-ledger`, published by QANTS. Not related to other projects
 
 <!-- mcp-name: io.github.qants-labs/mizan-ledger -->
 
+**Measures when an AI agent should say 'I don't know' (Brier + calibration).**
+
 Declare how confident your agent is **before** a task, commit a salted hash of that declaration, then score honesty against the **real outcome** (your own tests, evals or checks). Local-first, hash-only, verifiable offline.
 
-> Status: **v0.2.0 (prepared, not yet released), early alpha** by QANTS. On PyPI (not on npm). MIT licensed (see `LICENSE`). No network access, no telemetry, no dependencies in the core library.
+> Status: **v0.2.0 (prepared, not yet released), early alpha** by QANTS. On PyPI (not on npm). MIT licensed (see `LICENSE`). No network access in the core library (only the explicit `mizan resolve` command fetches public data), no telemetry, no dependencies.
+
+## Verifiable resolution
+
+Every Mizan question can be re-resolved by anyone from public data:
+
+```
+mizan resolve --question-id q_2026_11_26_001 --reproduce
+```
+
+Two keyless public sources per question, a published tolerance, DISPUTED instead of auto-settling, an independent re-run, and a 48-hour dispute window before an answer counts. See [docs/resolution.md](docs/resolution.md). This is the only command that uses the network.
+
+Practice estimates are not ratings. Resolution is operator-assisted until decentralized adjudication is live.
 
 ## Why
 

@@ -1,0 +1,8 @@
+# Separation between resolving and being rated (hardening v1 T4, founder decision 26 Nov 2026).
+# Resolution is done by a separate, non-rated resolver process. Its identities are listed here. An identity on
+# this list never submits rated answers; if an answer from one of them ever appears, it is flagged
+# "resolver-conflict" and excluded from Brier and ratings. A1 and A2 stay rated baselines and are not resolvers:
+# the independent re-run is a second run of this same open-source resolver process, not a rated agent's opinion.
+version: 1.0.0
+resolver_agents: [mizan-resolver-primary, mizan-resolver-rerun]
+rated_baselines_never_resolvers: [qants-a1, qants-a2]

@@ -1,0 +1,44 @@
+# Mizan resolver: SPY (also QQQ, IWM) official daily close. Keyless public endpoints only; no account, no trading.
+# Both endpoints are public but unofficial (no published API terms); if either one blocks keyless access,
+# the resolver falls back to the other only because it is pre-approved below, and says so (confidence "low").
+id: spy_daily_close
+version: 1.0.0
+category: equity_etf
+entity:
+  symbol: SPY
+  allowed_symbols: [SPY, QQQ, IWM]
+  quote: USD
+  description: "Regular-session closing price of the ETF on its listing exchange"
+period:
+  close_time: "16:00:00"
+  timezone: America/New_York
+  value_date: question.date
+  # Normalised to UTC: 21:00Z in winter (EST), 20:00Z in summer (EDT). A non-trading day has no close: UNRESOLVED.
+sources:
+  - id: yahoo
+    name: Yahoo Finance chart API (no key)
+    url: "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&period1={day_start_epoch}&period2={day_end_epoch}"
+    extract: "indicators.quote[0].close of the bar whose New York trading date is D (unadjusted close)"
+    fallback_pre_approved: true
+  - id: nasdaq
+    name: Nasdaq.com historical quotes (no key)
+    url: "https://api.nasdaq.com/api/quote/{symbol}/historical?assetclass=etf&fromdate={yyyy}-{mm}-{dd}&todate={next_day_yyyy_mm_dd}&limit=5"
+    extract: "data.tradesTable.rows[date == MM/DD/YYYY].close (Close/Last)"
+    fallback_pre_approved: true
+normalization:
+  timestamps: UTC
+  value: decimal US dollars, "$" and "," removed, compared as floats
+  combine: mean of the two source values when they agree within tolerance
+tolerance:
+  relative_pct: 0.05
+missing_or_late:
+  wait_after_close_minutes: 60
+  retries: 3
+  single_source: allowed_if_pre_approved
+  no_source: UNRESOLVED
+outcome_rule:
+  value: close
+  comparator: question.comparator
+  threshold: question.threshold
+  results: ["YES", "NO", "DISPUTED", "UNRESOLVED"]
+reproduce: "mizan resolve --question-id {question_id} --reproduce"

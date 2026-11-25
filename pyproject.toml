@@ -33,6 +33,7 @@ mcp = ["mcp>=2.3,<3; python_version >= '3.10'"]
 
 [project.scripts]
 mizan-ledger = "mizan_ledger.cli:main"
+mizan = "mizan_ledger.cli:main"
 mizan-ledger-mcp = "mizan_ledger.mcp_server:main"
 
 [project.entry-points.pytest11]

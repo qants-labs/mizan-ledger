@@ -5,3 +5,7 @@ recursive-include tests *.py
 prune seed_runs
 prune private
 global-exclude __pycache__ *.pyc
+recursive-include resolvers *.yaml
+recursive-include questions *.json
+recursive-include tests/fixtures *.json
+recursive-include docs *.md
