@@ -218,3 +218,27 @@ def test_core_library_import_does_not_pull_in_the_network_module():
     r = subprocess.run([sys.executable, "-c", "import sys, mizan_ledger; print('mizan_ledger.resolver' in sys.modules, 'urllib.request' in sys.modules)"],
                        capture_output=True, text=True, env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
     assert r.stdout.split()[0] == "False"
+
+
+def test_ledger_rejects_resolver_and_checker_predictions_and_excludes_from_summary(tmp_path):
+    from mizan_ledger.core import Ledger, LedgerError, is_non_predicting_agent, _append_jsonl
+    for bad in ("mizan-resolver-primary", "mizan-resolver-rerun", "mizan-resolver-custom", "mizan-checker", "qants-checker"):
+        assert is_non_predicting_agent(bad) is True
+    for ok_id in ("qants-a1", "qants-a2", "qants-blockchain-first-principles", "qants-baseline-free-llm-a", "qants-baseline-free-llm-b"):
+        assert is_non_predicting_agent(ok_id) is False
+    lg = Ledger(tmp_path / "pub", private_path=tmp_path / "priv")
+    for bad in ("mizan-resolver-primary", "mizan-resolver-rerun", "mizan-checker", "qants-checker"):
+        with pytest.raises(LedgerError, match="resolver/checker"):
+            lg.declare("t-sep-1", 0.7, bad, "1.0")
+    lg.declare("t-sep-ok", 0.7, "qants-a2", "1.0")
+    lg.resolve("t-sep-ok", True, "qants-a2", "1.0")
+    _append_jsonl(lg.receipts_path, {"schema": "mizan-v1", "seq": 2, "agent_id": "mizan-resolver-primary",
+                                     "agent_version": "1.0", "commitment": "c", "declared_at": "2026-11-26T00:00:00Z", "prev": "g"})
+    _append_jsonl(lg.resolutions_path, {"schema": "mizan-v1", "seq": 2, "commitment": "c",
+                                        "agent_id": "mizan-resolver-primary", "agent_version": "1.0",
+                                        "outcome": 1, "resolved_at": "2026-11-26T00:01:00Z",
+                                        "opening": {"task_id": "t-inj", "p": "0.9000", "salt": "s"}})
+    assert lg.summary("mizan-resolver-primary")["n"] == 0
+    assert lg.summary("mizan-resolver-primary")["declared"] == 0
+    assert lg.pairs("mizan-resolver-primary") == []
+    assert lg.summary()["resolved"] == 1

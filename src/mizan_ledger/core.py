@@ -17,6 +17,14 @@ from . import metrics
 SCHEMA = "mizan-ledger/1"
 GENESIS = "0" * 64
 LOG_LOSS_CLIP = metrics.LOG_LOSS_CLIP
+NON_PREDICTING_AGENT_IDS = ("mizan-resolver-primary", "mizan-resolver-rerun", "mizan-checker", "qants-checker")
+NON_PREDICTING_PREFIXES = ("mizan-resolver-",)
+
+
+def is_non_predicting_agent(agent_id: str) -> bool:
+    """Resolver and checker identities may never declare predictions or enter rankings."""
+    aid = str(agent_id or "").strip().lower()
+    return aid in NON_PREDICTING_AGENT_IDS or any(aid.startswith(p) for p in NON_PREDICTING_PREFIXES)
 
 
 class LedgerError(Exception):
@@ -116,6 +124,8 @@ class Ledger:
         """Commit to a probability of success BEFORE the outcome is known. Returns the public receipt."""
         if not task_id or not agent_id:
             raise LedgerError("task_id and agent_id are required")
+        if is_non_predicting_agent(agent_id):
+            raise LedgerError(f"agent_id {agent_id!r} is a resolver/checker identity and may not declare predictions")
         p = float(p_success)
         fmt_p(p)  # validates
         if self._find_opening(task_id, agent_id, version):
@@ -171,10 +181,13 @@ class Ledger:
     # -- scoring ---------------------------------------------------------------
     def pairs(self, agent_id=None, version=None) -> list:
         return [(float(r["opening"]["p"]), r["outcome"]) for r in self.resolutions()
-                if (agent_id is None or r["agent_id"] == agent_id) and (version is None or r["agent_version"] == version)]
+                if not is_non_predicting_agent(r.get("agent_id", ""))
+                and (agent_id is None or r["agent_id"] == agent_id) and (version is None or r["agent_version"] == version)]
 
     def summary(self, agent_id=None, version=None) -> dict:
-        rcpts = [r for r in self.receipts() if (agent_id is None or r["agent_id"] == agent_id)
+        rcpts = [r for r in self.receipts()
+                 if not is_non_predicting_agent(r.get("agent_id", ""))
+                 and (agent_id is None or r["agent_id"] == agent_id)
                  and (version is None or r["agent_version"] == version)]
         pr = self.pairs(agent_id, version)
         out = metrics.summarize(pr) if pr else {"n": 0}

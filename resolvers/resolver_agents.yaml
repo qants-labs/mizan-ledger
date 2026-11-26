@@ -1,8 +1,9 @@
-# Separation between resolving and being rated (hardening v1 T4, founder decision 26 Nov 2026).
-# Resolution is done by a separate, non-rated resolver process. Its identities are listed here. An identity on
-# this list never submits rated answers; if an answer from one of them ever appears, it is flagged
-# "resolver-conflict" and excluded from Brier and ratings. A1 and A2 stay rated baselines and are not resolvers:
-# the independent re-run is a second run of this same open-source resolver process, not a rated agent's opinion.
-version: 1.0.0
+# Separation between resolving/checking and predicting (hardening v1 T4, founder decisions 26 Nov 2026).
+# Resolution is done by a separate, non-rated resolver process. Its identities (plus checker identities) are listed
+# here. An identity on this list never submits predictions or enters rankings; if an answer from one of them ever
+# appears in an external log, it is flagged and excluded from Brier and ratings. A1, A2, and free-LLM baselines
+# stay rated baselines and are never resolvers.
+version: 1.1.0
 resolver_agents: [mizan-resolver-primary, mizan-resolver-rerun]
-rated_baselines_never_resolvers: [qants-a1, qants-a2]
+checker_agents: [mizan-checker, qants-checker]
+rated_baselines_never_resolvers: [qants-a1, qants-a2, qants-blockchain-first-principles, qants-baseline-free-llm-a, qants-baseline-free-llm-b]

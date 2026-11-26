@@ -409,15 +409,21 @@ def dispute_evidence_ok(evidence):
 
 def load_resolver_agents(resolvers_dir):
     doc = yamlmini.loads((Path(resolvers_dir) / "resolver_agents.yaml").read_text(encoding="utf-8"))
-    overlap = set(doc["resolver_agents"]) & set(doc.get("rated_baselines_never_resolvers", []))
+    non_pred = set(doc["resolver_agents"]) | set(doc.get("checker_agents", []))
+    overlap = non_pred & set(doc.get("rated_baselines_never_resolvers", []))
     if overlap:
         raise ValueError(f"resolver_agents.yaml: rated baselines listed as resolvers: {sorted(overlap)}")
     return doc
 
 
 def answer_flags(agent_id, resolver_agents_doc):
-    """'resolver-conflict' when a resolver identity shows up as an answering agent: excluded from Brier and ratings."""
-    return ["resolver-conflict"] if agent_id in set(resolver_agents_doc["resolver_agents"]) else []
+    """'resolver-conflict' when a resolver/checker identity shows up as an answering agent: excluded from Brier and ratings."""
+    aid = str(agent_id or "").strip().lower()
+    if aid in {x.lower() for x in resolver_agents_doc["resolver_agents"]} or aid.startswith("mizan-resolver-"):
+        return ["resolver-conflict"]
+    if aid in {x.lower() for x in resolver_agents_doc.get("checker_agents", [])}:
+        return ["checker-conflict"]
+    return []
 
 
 # ---------------------------------------------------------------- reproduce entry point
