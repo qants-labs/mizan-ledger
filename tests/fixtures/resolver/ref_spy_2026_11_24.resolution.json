@@ -1,0 +1,34 @@
+{
+  "confidence": "high",
+  "outcome": "NO",
+  "question_id": "ref_spy_2026_11_24",
+  "raw_values": {
+    "close_utc": "2026-11-24T21:00:00Z",
+    "combined": 718.7800146484375,
+    "nasdaq": 718.78,
+    "yahoo": 718.780029296875
+  },
+  "resolved_at": "2026-11-25T23:29:05Z",
+  "resolver_hash": "sha256:b336cf695171841440389435dd4654c9676f2539742277fdd55c0bfc4dc800ba",
+  "resolver_version": "1.0.0",
+  "sources": [
+    {
+      "available": true,
+      "body_sha256": "sha256:e2434013fe4866f22bc62015d64d1f317689f5122dbe6aca4c690d221bf21eb8",
+      "fallback_pre_approved": true,
+      "id": "yahoo",
+      "request_time": "2026-11-25T23:29:05Z",
+      "status": 200,
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=1795478400&period2=1795564800"
+    },
+    {
+      "available": true,
+      "body_sha256": "sha256:8e3893a7193debabfeeb8562ea662102451cbeb3b9a8193e6dc7eb0429055622",
+      "fallback_pre_approved": true,
+      "id": "nasdaq",
+      "request_time": "2026-11-25T23:29:06Z",
+      "status": 200,
+      "url": "https://api.nasdaq.com/api/quote/SPY/historical?assetclass=etf&fromdate=2026-11-24&todate=2026-11-25&limit=5"
+    }
+  ]
+}

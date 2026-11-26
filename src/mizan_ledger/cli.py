@@ -1,5 +1,8 @@
-"""Command line: mizan-ledger verify <dir> | summary <dir> [--agent ID] | gate <dir> --baseline FILE | mcp"""
-import argparse, json, sys
+"""Command line: mizan-ledger verify <dir> | summary <dir> [--agent ID] | gate <dir> --baseline FILE | resolve --question-id ID --reproduce | mcp
+
+Also installed as `mizan` (same commands): mizan resolve --question-id q_2026_11_26_001 --reproduce
+"""
+import argparse, json, os, sys
 from .core import Ledger, verify_ledger_dir
 
 _MCP_HINT = 'The MCP extra is not installed. Run: pip install "mizan-ledger[mcp]"'
@@ -47,7 +50,36 @@ def main(argv=None) -> int:
         help="run the optional local stdio MCP server (requires the [mcp] extra)",
         description="Run the optional local stdio MCP server. Requires pip install \"mizan-ledger[mcp]\". Same entry point as the mizan-ledger-mcp script.",
     )
+    r = sub.add_parser("resolve", help="resolve or reproduce a Mizan question from public data (network: only this command)",
+                       description="Resolve a question from its published resolver file and two keyless public sources. "
+                                   "--reproduce re-runs the published rule; with --snapshot it replays a recorded fetch log "
+                                   "offline (byte-identical inputs). " + "Practice estimates are not ratings. Resolution is "
+                                   "operator-assisted until decentralized adjudication is live.")
+    r.add_argument("--question-id", required=True)
+    r.add_argument("--reproduce", action="store_true", help="re-run the published resolution rule and print the result")
+    r.add_argument("--questions", default="questions", help="folder with <question-id>.json (default: ./questions)")
+    r.add_argument("--resolvers", default="resolvers", help="folder with the resolver YAML files (default: ./resolvers)")
+    r.add_argument("--snapshot", help="replay this recorded fetch log instead of fetching live")
+    r.add_argument("--log", help="write the full fetch log (URLs, request times, raw bodies, sha256) to this file")
+    r.add_argument("--compare", help="a published resolution JSON: also print the re-run comparison (exit 1 unless ACCEPTED)")
     a = ap.parse_args(argv)
+    if a.cmd == "resolve":
+        from . import resolver as R
+        try:
+            res = R.reproduce(a.question_id, a.questions, a.resolvers, snapshot=a.snapshot, log_out=a.log)
+        except (ValueError, LookupError, OSError) as exc:
+            print(json.dumps({"question_id": a.question_id, "error": str(exc)}), file=sys.stderr)
+            return 2
+        print(json.dumps(res, indent=2, sort_keys=True))
+        if a.compare:
+            q = R.load_question(a.questions, a.question_id)
+            rv, _ = R.load_resolver(a.resolvers, q["resolution_rule"]["resolver"])
+            with open(a.compare, encoding="utf-8") as fh:
+                published = json.load(fh)
+            rec = R.reconcile(published, res, rv, q)
+            print(json.dumps({"reconciliation": rec}, indent=2, sort_keys=True), file=sys.stderr)
+            return 0 if rec["status"] == "ACCEPTED" else 1
+        return 0
     if a.cmd == "verify":
         rep = verify_ledger_dir(a.dir)
         print(json.dumps(rep, indent=2, sort_keys=True))

@@ -1,6 +1,11 @@
 # Changelog
 
 ## 0.2.0 (prepared 2026-11-23, not yet released)
+- Hardening v1 T4, verifiable resolution: a new `mizan resolve --question-id ID --reproduce` command, also installed as `mizan`. Details in `docs/resolution.md`.
+  - Declarative resolver files `resolvers/*.yaml` (XRP daily close, SPY/QQQ/IWM daily close, GitHub commits). Each has two keyless sources and a published tolerance, and outputs DISPUTED instead of auto-settling.
+  - Hashed question files in `questions/`.
+  - A replayable fetch log, re-run reconciliation, a 48h dispute window, and a resolver/rated separation guard.
+  - The only networked command. The core library import stays offline and dependency-free.
 - New `mizan-ledger gate` subcommand (Mizan Gate): a CI calibration gate against a committed baseline.
   - Input: a ledger directory, or a JSONL file of `{id, confidence (0..1 or null), correct}` items. JSONL is converted
     to a ledger internally, so both share one scoring path.

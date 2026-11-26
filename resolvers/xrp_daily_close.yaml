@@ -1,0 +1,45 @@
+# Mizan resolver: XRP/USD daily close. Keyless public sources only; no account, no trading.
+# Any edit to this file changes its sha256, and that hash is part of every question_hash that uses it,
+# so an edited resolver needs a new version and new questions.
+id: xrp_daily_close
+version: 1.0.0
+category: crypto
+entity:
+  symbol: XRP
+  quote: USD
+  description: "XRP price in US dollars at the daily close"
+period:
+  # The close of day D is the price at D 00:00:00 UTC, i.e. the end of the UTC day before D.
+  close_time: "00:00:00"
+  timezone: UTC
+  value_date: question.date
+sources:
+  - id: coingecko
+    name: CoinGecko public API (no key)
+    url: "https://api.coingecko.com/api/v3/coins/ripple/history?date={dd}-{mm}-{yyyy}&localization=false"
+    extract: "market_data.current_price.usd (CoinGecko's 00:00 UTC snapshot for the date)"
+    fallback_pre_approved: true
+  - id: kraken
+    name: Kraken public OHLC (no key)
+    url: "https://api.kraken.com/0/public/OHLC?pair=XRPUSD&interval=1440&since={prev_day_epoch_minus_1}"
+    extract: "close (field 4) of the daily candle that opens at D-1 00:00 UTC and closes at D 00:00 UTC"
+    fallback_pre_approved: true
+normalization:
+  timestamps: UTC
+  value: decimal US dollars, compared as floats, not rounded
+  combine: mean of the two source values when they agree within tolerance
+tolerance:
+  # Relative difference |a - b| / mean(a, b). A question may set its own tolerance_pct (it is hashed with the question).
+  relative_pct: 0.5
+missing_or_late:
+  wait_after_close_minutes: 30
+  retries: 3
+  # Only a source with fallback_pre_approved: true may resolve alone; the result then has confidence "low".
+  single_source: allowed_if_pre_approved
+  no_source: UNRESOLVED
+outcome_rule:
+  value: close
+  comparator: question.comparator
+  threshold: question.threshold
+  results: ["YES", "NO", "DISPUTED", "UNRESOLVED"]
+reproduce: "mizan resolve --question-id {question_id} --reproduce"
